@@ -6,61 +6,34 @@ contract LeagueTreasury {
                                  ERRORS
     //////////////////////////////////////////////////////////////*/
 
+    error LeagueTreasury__InvalidName(uint256 length);
     error LeagueTreasury__InvalidTeamCount(uint8 teamCount);
-    error LeagueTreasury__PayoutLengthMismatch(
-        uint8 teamCount,
-        uint256 payoutLength
-    );
+    error LeagueTreasury__PayoutLengthMismatch(uint8 teamCount, uint256 payoutLength);
     error LeagueTreasury__InvalidBuyIn(uint256 buyIn);
     error LeagueTreasury__InvalidReporter(address reporter);
     error LeagueTreasury__InvalidJoinDeadline(uint64 joinDeadline);
-    error LeagueTreasury__InvalidStandingsDeadline(
-        uint64 standingsDeadline,
-        uint64 joinDeadline
-    );
+    error LeagueTreasury__InvalidStandingsDeadline(uint64 standingsDeadline, uint64 joinDeadline);
     error LeagueTreasury__InvalidPayoutTotal(uint256 total);
     error LeagueTreasury__LeagueNotFound(uint256 leagueId);
     error LeagueTreasury__LeagueNotOpen(uint256 leagueId, LeagueState state);
-    error LeagueTreasury__JoinDeadlinePassed(
-        uint256 leagueId,
-        uint64 joinDeadline
-    );
+    error LeagueTreasury__JoinDeadlinePassed(uint256 leagueId, uint64 joinDeadline);
     error LeagueTreasury__InvalidTeamId(uint32 teamId);
     error LeagueTreasury__TeamAlreadyTaken(uint256 leagueId, uint32 teamId);
     error LeagueTreasury__IncorrectBuyIn(uint256 sent, uint256 required);
     error LeagueTreasury__MemberAlreadyJoined(uint256 leagueId, address member);
-    error LeagueTreasury__InvalidState(
-        uint256 leagueId,
-        LeagueState expected,
-        LeagueState actual
-    );
+    error LeagueTreasury__InvalidState(uint256 leagueId, LeagueState expected, LeagueState actual);
     error LeagueTreasury__NotReporter(address caller);
-    error LeagueTreasury__StandingsDeadlinePassed(
-        uint256 leagueId,
-        uint64 deadline
-    );
-    error LeagueTreasury__RankingLengthMismatch(
-        uint8 teamCount,
-        uint256 rankingLength
-    );
+    error LeagueTreasury__StandingsDeadlinePassed(uint256 leagueId, uint64 deadline);
+    error LeagueTreasury__RankingLengthMismatch(uint8 teamCount, uint256 rankingLength);
     error LeagueTreasury__DuplicateTeam(uint32 teamId);
     error LeagueTreasury__NotCommissioner(address caller);
     error LeagueTreasury__NotMember(uint256 leagueId, address caller);
-    error LeagueTreasury__ChallengeWindowClosed(
-        uint256 leagueId,
-        uint256 closedAt
-    );
-    error LeagueTreasury__ChallengeWindowOpen(
-        uint256 leagueId,
-        uint256 closesAt
-    );
+    error LeagueTreasury__ChallengeWindowClosed(uint256 leagueId, uint256 closedAt);
+    error LeagueTreasury__ChallengeWindowOpen(uint256 leagueId, uint256 closesAt);
     error LeagueTreasury__AlreadyClaimed(uint256 leagueId, address member);
     error LeagueTreasury__TransferFailed(address recipient, uint256 amount);
     error LeagueTreasury__NotRefundable(uint256 leagueId, LeagueState state);
-    error LeagueTreasury__DisputeResolutionWindowClosed(
-        uint256 leagueId,
-        uint256 closedAt
-    );
+    error LeagueTreasury__DisputeResolutionWindowClosed(uint256 leagueId, uint256 closedAt);
 
     /*//////////////////////////////////////////////////////////////
                            TYPE DECLARATIONS
@@ -103,6 +76,7 @@ contract LeagueTreasury {
     uint256 public constant TOTAL_BPS = 10000; // 100% in basis points
     uint256 public constant CHALLENGE_WINDOW = 48 hours;
     uint256 public constant DISPUTE_RESOLUTION_WINDOW = 7 days;
+    uint256 public constant MAX_NAME_LENGTH = 64; // bytes
 
     uint256 public nextLeagueId;
     mapping(uint256 => League) public leagues;
@@ -114,34 +88,26 @@ contract LeagueTreasury {
                                  EVENTS
     //////////////////////////////////////////////////////////////*/
 
+    /// @dev `name` and `espnLeagueId` are only emitted, never stored: the frontend
+    /// reads them from this event, which costs far less gas than storage.
     event LeagueCreated(
         uint256 indexed leagueId,
         address indexed commissioner,
         address indexed reporter,
         uint8 teamCount,
-        uint256 buyIn
+        uint256 buyIn,
+        string name,
+        uint64 espnLeagueId
     );
-    event MemberJoined(
-        uint256 indexed leagueId,
-        address indexed member,
-        uint32 indexed teamId
-    );
+    event MemberJoined(uint256 indexed leagueId, address indexed member, uint32 indexed teamId);
     event LeagueActivated(uint256 indexed leagueId);
     event StandingsSubmitted(uint256 indexed leagueId, uint64 submittedAt);
     event StandingsDisputed(uint256 indexed leagueId, address indexed member);
     event StandingsFinalized(uint256 indexed leagueId);
     event DisputeResolved(uint256 indexed leagueId);
-    event PayoutClaimed(
-        uint256 indexed leagueId,
-        address indexed member,
-        uint256 amount
-    );
+    event PayoutClaimed(uint256 indexed leagueId, address indexed member, uint256 amount);
     event LeagueCancelled(uint256 indexed leagueId);
-    event RefundWithdrawn(
-        uint256 indexed leagueId,
-        address indexed member,
-        uint256 amount
-    );
+    event RefundWithdrawn(uint256 indexed leagueId, address indexed member, uint256 amount);
 
     /*//////////////////////////////////////////////////////////////
                                MODIFIERS
@@ -173,6 +139,8 @@ contract LeagueTreasury {
     //////////////////////////////////////////////////////////////*/
 
     function createLeague(
+        string calldata name,
+        uint64 espnLeagueId,
         address reporter,
         uint256 buyIn,
         uint8 teamCount,
@@ -180,14 +148,37 @@ contract LeagueTreasury {
         uint64 standingsDeadline,
         uint16[] calldata payout
     ) external returns (uint256 leagueId) {
+        // Validation, storage and the event live in internal helpers. Doing it all
+        // inline needs more variables than the EVM's stack allows ("stack too deep").
+        _validateLeague(name, reporter, buyIn, teamCount, joinDeadline, standingsDeadline, payout);
+        leagueId = _storeLeague(reporter, buyIn, teamCount, joinDeadline, standingsDeadline, payout);
+        _emitLeagueCreated(leagueId, name, espnLeagueId);
+    }
+
+    function _emitLeagueCreated(uint256 leagueId, string calldata name, uint64 espnLeagueId) internal {
+        League storage league = leagues[leagueId];
+        emit LeagueCreated(
+            leagueId, league.commissioner, league.reporter, league.teamCount, league.buyIn, name, espnLeagueId
+        );
+    }
+
+    function _validateLeague(
+        string calldata name,
+        address reporter,
+        uint256 buyIn,
+        uint8 teamCount,
+        uint64 joinDeadline,
+        uint64 standingsDeadline,
+        uint16[] calldata payout
+    ) internal view {
+        if (bytes(name).length == 0 || bytes(name).length > MAX_NAME_LENGTH) {
+            revert LeagueTreasury__InvalidName(bytes(name).length);
+        }
         if (teamCount < 2) {
             revert LeagueTreasury__InvalidTeamCount(teamCount);
         }
         if (payout.length != teamCount) {
-            revert LeagueTreasury__PayoutLengthMismatch(
-                teamCount,
-                payout.length
-            );
+            revert LeagueTreasury__PayoutLengthMismatch(teamCount, payout.length);
         }
         if (buyIn == 0) {
             revert LeagueTreasury__InvalidBuyIn(buyIn);
@@ -199,10 +190,7 @@ contract LeagueTreasury {
             revert LeagueTreasury__InvalidJoinDeadline(joinDeadline);
         }
         if (standingsDeadline <= joinDeadline) {
-            revert LeagueTreasury__InvalidStandingsDeadline(
-                standingsDeadline,
-                joinDeadline
-            );
+            revert LeagueTreasury__InvalidStandingsDeadline(standingsDeadline, joinDeadline);
         }
 
         uint256 total = 0;
@@ -212,7 +200,16 @@ contract LeagueTreasury {
         if (total != TOTAL_BPS) {
             revert LeagueTreasury__InvalidPayoutTotal(total);
         }
+    }
 
+    function _storeLeague(
+        address reporter,
+        uint256 buyIn,
+        uint8 teamCount,
+        uint64 joinDeadline,
+        uint64 standingsDeadline,
+        uint16[] calldata payout
+    ) internal returns (uint256 leagueId) {
         leagueId = nextLeagueId++;
         leagues[leagueId] = League({
             commissioner: msg.sender,
@@ -227,23 +224,15 @@ contract LeagueTreasury {
             disputedAt: 0
         });
         payoutBps[leagueId] = payout;
-
-        emit LeagueCreated(leagueId, msg.sender, reporter, teamCount, buyIn);
     }
 
-    function joinLeague(
-        uint256 leagueId,
-        uint32 teamId
-    ) external payable leagueExists(leagueId) {
+    function joinLeague(uint256 leagueId, uint32 teamId) external payable leagueExists(leagueId) {
         League storage league = leagues[leagueId];
         if (league.state != LeagueState.OPEN) {
             revert LeagueTreasury__LeagueNotOpen(leagueId, league.state);
         }
         if (block.timestamp >= league.joinDeadline) {
-            revert LeagueTreasury__JoinDeadlinePassed(
-                leagueId,
-                league.joinDeadline
-            );
+            revert LeagueTreasury__JoinDeadlinePassed(leagueId, league.joinDeadline);
         }
         if (teamId == 0) {
             revert LeagueTreasury__InvalidTeamId(teamId);
@@ -272,17 +261,11 @@ contract LeagueTreasury {
         emit MemberJoined(leagueId, msg.sender, teamId);
     }
 
-    function _recordStandings(
-        uint256 leagueId,
-        uint32[] calldata rankedTeamIds
-    ) internal {
+    function _recordStandings(uint256 leagueId, uint32[] calldata rankedTeamIds) internal {
         League storage league = leagues[leagueId];
 
         if (rankedTeamIds.length != league.teamCount) {
-            revert LeagueTreasury__RankingLengthMismatch(
-                league.teamCount,
-                rankedTeamIds.length
-            );
+            revert LeagueTreasury__RankingLengthMismatch(league.teamCount, rankedTeamIds.length);
         }
         // reset to 0 before setting finalPlace to avoid duplicate team errors on re-submission
         for (uint32 i = 0; i < rankedTeamIds.length; i++) {
@@ -307,24 +290,18 @@ contract LeagueTreasury {
         }
     }
 
-    function submitStandings(
-        uint256 leagueId,
-        uint32[] calldata rankedTeamIds
-    ) external leagueExists(leagueId) onlyReporter(leagueId) {
+    function submitStandings(uint256 leagueId, uint32[] calldata rankedTeamIds)
+        external
+        leagueExists(leagueId)
+        onlyReporter(leagueId)
+    {
         League storage league = leagues[leagueId];
         if (league.state != LeagueState.ACTIVE) {
-            revert LeagueTreasury__InvalidState(
-                leagueId,
-                LeagueState.ACTIVE,
-                league.state
-            );
+            revert LeagueTreasury__InvalidState(leagueId, LeagueState.ACTIVE, league.state);
         }
 
         if (block.timestamp >= league.standingsDeadline) {
-            revert LeagueTreasury__StandingsDeadlinePassed(
-                leagueId,
-                league.standingsDeadline
-            );
+            revert LeagueTreasury__StandingsDeadlinePassed(leagueId, league.standingsDeadline);
         }
 
         _recordStandings(leagueId, rankedTeamIds);
@@ -346,11 +323,7 @@ contract LeagueTreasury {
 
         League storage league = leagues[leagueId];
         if (league.state != LeagueState.STANDINGS_SUBMITTED) {
-            revert LeagueTreasury__InvalidState(
-                leagueId,
-                LeagueState.STANDINGS_SUBMITTED,
-                league.state
-            );
+            revert LeagueTreasury__InvalidState(leagueId, LeagueState.STANDINGS_SUBMITTED, league.state);
         }
 
         uint256 windowEnd = league.standingsSubmittedAt + CHALLENGE_WINDOW;
@@ -368,11 +341,7 @@ contract LeagueTreasury {
     function finalize(uint256 leagueId) external leagueExists(leagueId) {
         League storage league = leagues[leagueId];
         if (league.state != LeagueState.STANDINGS_SUBMITTED) {
-            revert LeagueTreasury__InvalidState(
-                leagueId,
-                LeagueState.STANDINGS_SUBMITTED,
-                league.state
-            );
+            revert LeagueTreasury__InvalidState(leagueId, LeagueState.STANDINGS_SUBMITTED, league.state);
         }
 
         uint256 windowEnd = league.standingsSubmittedAt + CHALLENGE_WINDOW;
@@ -384,25 +353,19 @@ contract LeagueTreasury {
         emit StandingsFinalized(leagueId);
     }
 
-    function resolveDispute(
-        uint256 leagueId,
-        uint32[] calldata correctedRanking
-    ) external leagueExists(leagueId) onlyCommissioner(leagueId) {
+    function resolveDispute(uint256 leagueId, uint32[] calldata correctedRanking)
+        external
+        leagueExists(leagueId)
+        onlyCommissioner(leagueId)
+    {
         League storage league = leagues[leagueId];
         if (league.state != LeagueState.DISPUTED) {
-            revert LeagueTreasury__InvalidState(
-                leagueId,
-                LeagueState.DISPUTED,
-                league.state
-            );
+            revert LeagueTreasury__InvalidState(leagueId, LeagueState.DISPUTED, league.state);
         }
 
         uint256 windowEnd = league.disputedAt + DISPUTE_RESOLUTION_WINDOW;
         if (block.timestamp >= windowEnd) {
-            revert LeagueTreasury__DisputeResolutionWindowClosed(
-                leagueId,
-                windowEnd
-            );
+            revert LeagueTreasury__DisputeResolutionWindowClosed(leagueId, windowEnd);
         }
 
         _recordStandings(leagueId, correctedRanking);
@@ -418,11 +381,7 @@ contract LeagueTreasury {
             revert LeagueTreasury__NotMember(leagueId, msg.sender);
         }
         if (league.state != LeagueState.FINALIZED) {
-            revert LeagueTreasury__InvalidState(
-                leagueId,
-                LeagueState.FINALIZED,
-                league.state
-            );
+            revert LeagueTreasury__InvalidState(leagueId, LeagueState.FINALIZED, league.state);
         }
         if (member.claimed) {
             revert LeagueTreasury__AlreadyClaimed(leagueId, msg.sender);
@@ -433,23 +392,17 @@ contract LeagueTreasury {
         emit PayoutClaimed(leagueId, msg.sender, payout);
 
         if (payout > 0) {
-            (bool success, ) = payable(msg.sender).call{value: payout}("");
+            (bool success,) = payable(msg.sender).call{value: payout}("");
             if (!success) {
                 revert LeagueTreasury__TransferFailed(msg.sender, payout);
             }
         }
     }
 
-    function cancelLeague(
-        uint256 leagueId
-    ) external leagueExists(leagueId) onlyCommissioner(leagueId) {
+    function cancelLeague(uint256 leagueId) external leagueExists(leagueId) onlyCommissioner(leagueId) {
         League storage league = leagues[leagueId];
         if (league.state != LeagueState.OPEN) {
-            revert LeagueTreasury__InvalidState(
-                leagueId,
-                LeagueState.OPEN,
-                league.state
-            );
+            revert LeagueTreasury__InvalidState(leagueId, LeagueState.OPEN, league.state);
         }
 
         league.state = LeagueState.CANCELLED;
@@ -479,7 +432,7 @@ contract LeagueTreasury {
         uint256 amount = league.buyIn;
         emit RefundWithdrawn(leagueId, msg.sender, amount);
 
-        (bool success, ) = payable(msg.sender).call{value: amount}("");
+        (bool success,) = payable(msg.sender).call{value: amount}("");
         if (!success) {
             revert LeagueTreasury__TransferFailed(msg.sender, amount);
         }
@@ -489,16 +442,11 @@ contract LeagueTreasury {
                              VIEW FUNCTIONS
     //////////////////////////////////////////////////////////////*/
 
-    function getPayoutBps(
-        uint256 leagueId
-    ) external view leagueExists(leagueId) returns (uint16[] memory) {
+    function getPayoutBps(uint256 leagueId) external view leagueExists(leagueId) returns (uint16[] memory) {
         return payoutBps[leagueId];
     }
 
-    function getPayout(
-        uint256 leagueId,
-        address member
-    ) public view returns (uint256) {
+    function getPayout(uint256 leagueId, address member) public view returns (uint256) {
         League storage league = leagues[leagueId];
         Member storage m = members[leagueId][member];
 
@@ -523,9 +471,7 @@ contract LeagueTreasury {
         return 0;
     }
 
-    function isRefundable(
-        uint256 leagueId
-    ) public view leagueExists(leagueId) returns (bool) {
+    function isRefundable(uint256 leagueId) public view leagueExists(leagueId) returns (bool) {
         League storage league = leagues[leagueId];
         LeagueState state = league.state;
 
@@ -539,9 +485,7 @@ contract LeagueTreasury {
             return block.timestamp >= league.standingsDeadline;
         }
         if (state == LeagueState.DISPUTED) {
-            return
-                block.timestamp >=
-                league.disputedAt + DISPUTE_RESOLUTION_WINDOW;
+            return block.timestamp >= league.disputedAt + DISPUTE_RESOLUTION_WINDOW;
         }
         return false;
     }

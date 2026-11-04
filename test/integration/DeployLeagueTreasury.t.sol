@@ -10,6 +10,7 @@ import {LeagueTreasury} from "../../src/LeagueTreasury.sol";
 contract DeployLeagueTreasuryTest is Test {
     uint256 constant BUY_IN = 0.01 ether;
     uint8 constant TEAM_COUNT = 2;
+    uint64 constant ESPN_LEAGUE_ID = 87654321;
 
     LeagueTreasury leagueTreasury;
     address commissioner = makeAddr("commissioner");
@@ -36,7 +37,14 @@ contract DeployLeagueTreasuryTest is Test {
 
         vm.prank(commissioner);
         uint256 leagueId = leagueTreasury.createLeague(
-            reporter, BUY_IN, TEAM_COUNT, uint64(block.timestamp + 1 days), uint64(block.timestamp + 2 days), payout
+            "Integration League",
+            ESPN_LEAGUE_ID,
+            reporter,
+            BUY_IN,
+            TEAM_COUNT,
+            uint64(block.timestamp + 1 days),
+            uint64(block.timestamp + 2 days),
+            payout
         );
 
         vm.prank(alice);
