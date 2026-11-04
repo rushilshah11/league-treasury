@@ -13,12 +13,17 @@ contract LeagueTreasuryTest is Test {
 
     uint256 constant BUY_IN = 0.01 ether;
     uint8 constant TEAM_COUNT = 14;
+    uint256 constant STARTING_BALANCE = 1 ether;
+
+    /*//////////////////////////////////////////////////////////////
+                                HELPERS
+    //////////////////////////////////////////////////////////////*/
 
     function _linearPayout(
         uint8 teamCount
     ) internal pure returns (uint16[] memory) {
         uint256 n = teamCount;
-        uint256 weightSum = (n * (n + 1)) / 2; // Sum of first n natural numbers
+        uint256 weightSum = (n * (n + 1)) / 2; // sum of 1..n
 
         uint16[] memory payout = new uint16[](teamCount);
         uint256 totalBps = 0;
@@ -26,7 +31,7 @@ contract LeagueTreasuryTest is Test {
             payout[i] = uint16(((n - i) * 10000) / weightSum);
             totalBps += payout[i];
         }
-        // Adjust the first payout to ensure the total is exactly 10000 bps. give remaining to first place
+        // give the rounding remainder to 1st place so the total is exactly 10000
         payout[0] += uint16(10000 - totalBps);
         return payout;
     }
@@ -42,14 +47,43 @@ contract LeagueTreasuryTest is Test {
             uint64(block.timestamp + 2 days),
             payout
         );
-        return leagueId;
+    }
+
+    function _join(address who, uint256 leagueId, uint32 teamId) internal {
+        vm.prank(who);
+        leagueTreasury.joinLeague{value: BUY_IN}(leagueId, teamId);
+    }
+
+    /// Fills every slot in the league with generated members (teams 1..TEAM_COUNT).
+    function _fillLeague(uint256 leagueId) internal {
+        for (uint32 i = 1; i <= TEAM_COUNT; i++) {
+            address member = makeAddr(string.concat("member", vm.toString(i)));
+            vm.deal(member, STARTING_BALANCE);
+            _join(member, leagueId, i);
+        }
+    }
+
+    function _state(
+        uint256 leagueId
+    ) internal view returns (LeagueTreasury.LeagueState state) {
+        (, , , , state, , , ) = leagueTreasury.leagues(leagueId);
+    }
+
+    function _memberCount(
+        uint256 leagueId
+    ) internal view returns (uint8 memberCount) {
+        (, , , memberCount, , , , ) = leagueTreasury.leagues(leagueId);
     }
 
     function setUp() public {
         leagueTreasury = new LeagueTreasury();
-        vm.deal(alice, 1 ether);
-        vm.deal(bob, 1 ether);
+        vm.deal(alice, STARTING_BALANCE);
+        vm.deal(bob, STARTING_BALANCE);
     }
+
+    /*//////////////////////////////////////////////////////////////
+                          createLeague: happy path
+    //////////////////////////////////////////////////////////////*/
 
     function test_CreateLeague_IncrementsLeagueId() public {
         uint256 leagueId1 = _createLeague();
@@ -98,16 +132,20 @@ contract LeagueTreasuryTest is Test {
     function test_CreateLeague_StoresPayoutTable() public {
         uint256 leagueId = _createLeague();
         uint16[] memory storedPayout = leagueTreasury.getPayoutBps(leagueId);
+        uint16[] memory expectedPayout = _linearPayout(TEAM_COUNT);
 
         assertEq(storedPayout.length, TEAM_COUNT);
         uint256 totalPayout = 0;
-        uint16[] memory expectedPayout = _linearPayout(TEAM_COUNT);
         for (uint8 i = 0; i < TEAM_COUNT; i++) {
             totalPayout += storedPayout[i];
             assertEq(storedPayout[i], expectedPayout[i]);
         }
         assertEq(totalPayout, leagueTreasury.TOTAL_BPS());
     }
+
+    /*//////////////////////////////////////////////////////////////
+                          createLeague: reverts
+    //////////////////////////////////////////////////////////////*/
 
     function test_RevertWhen_TeamCountBelowTwo() public {
         uint16[] memory payout = _linearPayout(1);
@@ -160,7 +198,6 @@ contract LeagueTreasuryTest is Test {
             )
         );
         vm.prank(commissioner);
-
         leagueTreasury.createLeague(
             reporter,
             0,
@@ -191,9 +228,9 @@ contract LeagueTreasuryTest is Test {
         );
     }
 
-    function test_RevertWhen_JoinDeadlineInPast() public {
+    function test_RevertWhen_JoinDeadlineNotInFuture() public {
         uint16[] memory payout = _linearPayout(TEAM_COUNT);
-        uint64 joinDeadline = uint64(block.timestamp);
+        uint64 joinDeadline = uint64(block.timestamp); // exactly "now" is not allowed
 
         vm.expectRevert(
             abi.encodeWithSelector(
@@ -214,14 +251,16 @@ contract LeagueTreasuryTest is Test {
 
     function test_RevertWhen_StandingsDeadlineBeforeJoinDeadline() public {
         uint16[] memory payout = _linearPayout(TEAM_COUNT);
+        uint64 joinDeadline = uint64(block.timestamp + 2 days);
+        uint64 standingsDeadline = uint64(block.timestamp + 1 days);
 
         vm.expectRevert(
             abi.encodeWithSelector(
                 LeagueTreasury
                     .LeagueTreasury__InvalidStandingsDeadline
                     .selector,
-                uint64(block.timestamp + 1 days),
-                uint64(block.timestamp + 2 days)
+                standingsDeadline,
+                joinDeadline
             )
         );
         vm.prank(commissioner);
@@ -229,22 +268,23 @@ contract LeagueTreasuryTest is Test {
             reporter,
             BUY_IN,
             TEAM_COUNT,
-            uint64(block.timestamp + 2 days),
-            uint64(block.timestamp + 1 days),
+            joinDeadline,
+            standingsDeadline,
             payout
         );
     }
 
     function test_RevertWhen_StandingsDeadlineEqualsJoinDeadline() public {
         uint16[] memory payout = _linearPayout(TEAM_COUNT);
+        uint64 deadline = uint64(block.timestamp + 1 days);
 
         vm.expectRevert(
             abi.encodeWithSelector(
                 LeagueTreasury
                     .LeagueTreasury__InvalidStandingsDeadline
                     .selector,
-                uint64(block.timestamp + 1 days),
-                uint64(block.timestamp + 1 days)
+                deadline,
+                deadline
             )
         );
         vm.prank(commissioner);
@@ -252,8 +292,8 @@ contract LeagueTreasuryTest is Test {
             reporter,
             BUY_IN,
             TEAM_COUNT,
-            uint64(block.timestamp + 1 days),
-            uint64(block.timestamp + 1 days),
+            deadline,
+            deadline,
             payout
         );
     }
@@ -261,7 +301,7 @@ contract LeagueTreasuryTest is Test {
     function test_RevertWhen_PayoutTotalWrong() public {
         uint16[] memory payout = new uint16[](TEAM_COUNT);
         for (uint8 i = 0; i < TEAM_COUNT; i++) {
-            payout[i] = 1; // This will not sum to 10000 bps
+            payout[i] = 1; // sums to 14, not 10000
         }
 
         vm.expectRevert(
@@ -282,8 +322,8 @@ contract LeagueTreasuryTest is Test {
     }
 
     function test_RevertWhen_PayoutTotalOffByOne() public {
-        uint16[] memory payout = _linearPayout(TEAM_COUNT);
-        payout[TEAM_COUNT - 1] -= 1;
+        uint16[] memory payout = _linearPayout(TEAM_COUNT); // sums to 10000
+        payout[TEAM_COUNT - 1] -= 1; // now sums to 9999
 
         vm.expectRevert(
             abi.encodeWithSelector(
@@ -300,5 +340,199 @@ contract LeagueTreasuryTest is Test {
             uint64(block.timestamp + 2 days),
             payout
         );
+    }
+
+    /*//////////////////////////////////////////////////////////////
+                           joinLeague: happy path
+    //////////////////////////////////////////////////////////////*/
+
+    function test_JoinLeague_StoresMember() public {
+        uint256 leagueId = _createLeague();
+        _join(alice, leagueId, 1);
+
+        (
+            uint32 teamId,
+            bool joined,
+            bool claimed,
+            uint8 finalPlace
+        ) = leagueTreasury.members(leagueId, alice);
+
+        assertEq(teamId, 1);
+        assertTrue(joined);
+        assertFalse(claimed);
+        assertEq(finalPlace, 0);
+    }
+
+    function test_JoinLeague_RecordsTeamOwner() public {
+        uint256 leagueId = _createLeague();
+        _join(alice, leagueId, 1);
+
+        assertEq(leagueTreasury.teamOwners(leagueId, 1), alice);
+    }
+
+    function test_JoinLeague_TakesBuyIn() public {
+        uint256 leagueId = _createLeague();
+        _join(alice, leagueId, 1);
+
+        assertEq(address(leagueTreasury).balance, BUY_IN);
+        assertEq(alice.balance, STARTING_BALANCE - BUY_IN);
+    }
+
+    function test_JoinLeague_IncrementsMemberCount() public {
+        uint256 leagueId = _createLeague();
+        _join(alice, leagueId, 1);
+        _join(bob, leagueId, 2);
+
+        assertEq(_memberCount(leagueId), 2);
+        assertEq(
+            uint8(_state(leagueId)),
+            uint8(LeagueTreasury.LeagueState.OPEN)
+        );
+    }
+
+    function test_JoinLeague_ActivatesWhenFull() public {
+        uint256 leagueId = _createLeague();
+        _fillLeague(leagueId);
+
+        assertEq(_memberCount(leagueId), TEAM_COUNT);
+        assertEq(
+            uint8(_state(leagueId)),
+            uint8(LeagueTreasury.LeagueState.ACTIVE)
+        );
+        assertEq(address(leagueTreasury).balance, BUY_IN * TEAM_COUNT);
+    }
+
+    function test_JoinLeague_EmitsMemberJoined() public {
+        uint256 leagueId = _createLeague();
+
+        vm.expectEmit(true, true, true, true);
+        emit LeagueTreasury.MemberJoined(leagueId, alice, 1);
+        _join(alice, leagueId, 1);
+    }
+
+    function test_JoinLeague_EmitsLeagueActivatedOnLastJoin() public {
+        uint256 leagueId = _createLeague();
+
+        // fill every slot except the last one
+        for (uint32 i = 1; i < TEAM_COUNT; i++) {
+            address member = makeAddr(string.concat("member", vm.toString(i)));
+            vm.deal(member, STARTING_BALANCE);
+            _join(member, leagueId, i);
+        }
+
+        vm.expectEmit(true, true, true, true);
+        emit LeagueTreasury.LeagueActivated(leagueId);
+        _join(alice, leagueId, TEAM_COUNT);
+    }
+
+    /*//////////////////////////////////////////////////////////////
+                            joinLeague: reverts
+    //////////////////////////////////////////////////////////////*/
+
+    function test_RevertWhen_JoiningLeagueThatDoesNotExist() public {
+        vm.expectRevert(
+            abi.encodeWithSelector(
+                LeagueTreasury.LeagueTreasury__LeagueNotFound.selector,
+                0
+            )
+        );
+        _join(alice, 0, 1);
+    }
+
+    function test_RevertWhen_JoiningFullLeague() public {
+        uint256 leagueId = _createLeague();
+        _fillLeague(leagueId);
+
+        vm.expectRevert(
+            abi.encodeWithSelector(
+                LeagueTreasury.LeagueTreasury__LeagueNotOpen.selector,
+                leagueId,
+                LeagueTreasury.LeagueState.ACTIVE
+            )
+        );
+        _join(alice, leagueId, 99);
+    }
+
+    function test_RevertWhen_JoiningAtJoinDeadline() public {
+        uint256 leagueId = _createLeague();
+        uint64 joinDeadline = uint64(block.timestamp + 1 days);
+        vm.warp(joinDeadline); // exactly at the deadline, joining is closed
+
+        vm.expectRevert(
+            abi.encodeWithSelector(
+                LeagueTreasury.LeagueTreasury__JoinDeadlinePassed.selector,
+                leagueId,
+                joinDeadline
+            )
+        );
+        _join(alice, leagueId, 1);
+    }
+
+    function test_RevertWhen_TeamIdIsZero() public {
+        uint256 leagueId = _createLeague();
+
+        vm.expectRevert(
+            abi.encodeWithSelector(
+                LeagueTreasury.LeagueTreasury__InvalidTeamId.selector,
+                0
+            )
+        );
+        _join(alice, leagueId, 0);
+    }
+
+    function test_RevertWhen_TeamAlreadyTaken() public {
+        uint256 leagueId = _createLeague();
+        _join(alice, leagueId, 1);
+
+        vm.expectRevert(
+            abi.encodeWithSelector(
+                LeagueTreasury.LeagueTreasury__TeamAlreadyTaken.selector,
+                leagueId,
+                1
+            )
+        );
+        _join(bob, leagueId, 1);
+    }
+
+    function test_RevertWhen_BuyInTooLow() public {
+        uint256 leagueId = _createLeague();
+
+        vm.expectRevert(
+            abi.encodeWithSelector(
+                LeagueTreasury.LeagueTreasury__IncorrectBuyIn.selector,
+                BUY_IN - 1,
+                BUY_IN
+            )
+        );
+        vm.prank(alice);
+        leagueTreasury.joinLeague{value: BUY_IN - 1}(leagueId, 1);
+    }
+
+    function test_RevertWhen_BuyInTooHigh() public {
+        uint256 leagueId = _createLeague();
+
+        vm.expectRevert(
+            abi.encodeWithSelector(
+                LeagueTreasury.LeagueTreasury__IncorrectBuyIn.selector,
+                BUY_IN + 1,
+                BUY_IN
+            )
+        );
+        vm.prank(alice);
+        leagueTreasury.joinLeague{value: BUY_IN + 1}(leagueId, 1);
+    }
+
+    function test_RevertWhen_MemberJoinsTwice() public {
+        uint256 leagueId = _createLeague();
+        _join(alice, leagueId, 1);
+
+        vm.expectRevert(
+            abi.encodeWithSelector(
+                LeagueTreasury.LeagueTreasury__MemberAlreadyJoined.selector,
+                leagueId,
+                alice
+            )
+        );
+        _join(alice, leagueId, 2);
     }
 }
