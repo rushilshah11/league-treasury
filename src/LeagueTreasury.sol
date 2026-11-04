@@ -179,4 +179,10 @@ contract LeagueTreasury {
 
         emit MemberJoined(leagueId, msg.sender, teamId);
     }
+
+    function getPayoutBps(
+        uint256 leagueId
+    ) external view leagueExists(leagueId) returns (uint16[] memory) {
+        return payoutBps[leagueId];
+    }
 }
