@@ -108,4 +108,197 @@ contract LeagueTreasuryTest is Test {
         }
         assertEq(totalPayout, leagueTreasury.TOTAL_BPS());
     }
+
+    function test_RevertWhen_TeamCountBelowTwo() public {
+        uint16[] memory payout = _linearPayout(1);
+
+        vm.expectRevert(
+            abi.encodeWithSelector(
+                LeagueTreasury.LeagueTreasury__InvalidTeamCount.selector,
+                1
+            )
+        );
+        vm.prank(commissioner);
+        leagueTreasury.createLeague(
+            reporter,
+            BUY_IN,
+            1,
+            uint64(block.timestamp + 1 days),
+            uint64(block.timestamp + 2 days),
+            payout
+        );
+    }
+
+    function test_RevertWhen_PayoutLengthMismatch() public {
+        uint16[] memory payout = _linearPayout(TEAM_COUNT - 1);
+
+        vm.expectRevert(
+            abi.encodeWithSelector(
+                LeagueTreasury.LeagueTreasury__PayoutLengthMismatch.selector,
+                TEAM_COUNT,
+                TEAM_COUNT - 1
+            )
+        );
+        vm.prank(commissioner);
+        leagueTreasury.createLeague(
+            reporter,
+            BUY_IN,
+            TEAM_COUNT,
+            uint64(block.timestamp + 1 days),
+            uint64(block.timestamp + 2 days),
+            payout
+        );
+    }
+
+    function test_RevertWhen_BuyInIsZero() public {
+        uint16[] memory payout = _linearPayout(TEAM_COUNT);
+
+        vm.expectRevert(
+            abi.encodeWithSelector(
+                LeagueTreasury.LeagueTreasury__InvalidBuyIn.selector,
+                0
+            )
+        );
+        vm.prank(commissioner);
+
+        leagueTreasury.createLeague(
+            reporter,
+            0,
+            TEAM_COUNT,
+            uint64(block.timestamp + 1 days),
+            uint64(block.timestamp + 2 days),
+            payout
+        );
+    }
+
+    function test_RevertWhen_ReporterIsZeroAddress() public {
+        uint16[] memory payout = _linearPayout(TEAM_COUNT);
+
+        vm.expectRevert(
+            abi.encodeWithSelector(
+                LeagueTreasury.LeagueTreasury__InvalidReporter.selector,
+                address(0)
+            )
+        );
+        vm.prank(commissioner);
+        leagueTreasury.createLeague(
+            address(0),
+            BUY_IN,
+            TEAM_COUNT,
+            uint64(block.timestamp + 1 days),
+            uint64(block.timestamp + 2 days),
+            payout
+        );
+    }
+
+    function test_RevertWhen_JoinDeadlineInPast() public {
+        uint16[] memory payout = _linearPayout(TEAM_COUNT);
+        uint64 joinDeadline = uint64(block.timestamp);
+
+        vm.expectRevert(
+            abi.encodeWithSelector(
+                LeagueTreasury.LeagueTreasury__InvalidJoinDeadline.selector,
+                joinDeadline
+            )
+        );
+        vm.prank(commissioner);
+        leagueTreasury.createLeague(
+            reporter,
+            BUY_IN,
+            TEAM_COUNT,
+            joinDeadline,
+            uint64(block.timestamp + 2 days),
+            payout
+        );
+    }
+
+    function test_RevertWhen_StandingsDeadlineBeforeJoinDeadline() public {
+        uint16[] memory payout = _linearPayout(TEAM_COUNT);
+
+        vm.expectRevert(
+            abi.encodeWithSelector(
+                LeagueTreasury
+                    .LeagueTreasury__InvalidStandingsDeadline
+                    .selector,
+                uint64(block.timestamp + 1 days),
+                uint64(block.timestamp + 2 days)
+            )
+        );
+        vm.prank(commissioner);
+        leagueTreasury.createLeague(
+            reporter,
+            BUY_IN,
+            TEAM_COUNT,
+            uint64(block.timestamp + 2 days),
+            uint64(block.timestamp + 1 days),
+            payout
+        );
+    }
+
+    function test_RevertWhen_StandingsDeadlineEqualsJoinDeadline() public {
+        uint16[] memory payout = _linearPayout(TEAM_COUNT);
+
+        vm.expectRevert(
+            abi.encodeWithSelector(
+                LeagueTreasury
+                    .LeagueTreasury__InvalidStandingsDeadline
+                    .selector,
+                uint64(block.timestamp + 1 days),
+                uint64(block.timestamp + 1 days)
+            )
+        );
+        vm.prank(commissioner);
+        leagueTreasury.createLeague(
+            reporter,
+            BUY_IN,
+            TEAM_COUNT,
+            uint64(block.timestamp + 1 days),
+            uint64(block.timestamp + 1 days),
+            payout
+        );
+    }
+
+    function test_RevertWhen_PayoutTotalWrong() public {
+        uint16[] memory payout = new uint16[](TEAM_COUNT);
+        for (uint8 i = 0; i < TEAM_COUNT; i++) {
+            payout[i] = 1; // This will not sum to 10000 bps
+        }
+
+        vm.expectRevert(
+            abi.encodeWithSelector(
+                LeagueTreasury.LeagueTreasury__InvalidPayoutTotal.selector,
+                TEAM_COUNT
+            )
+        );
+        vm.prank(commissioner);
+        leagueTreasury.createLeague(
+            reporter,
+            BUY_IN,
+            TEAM_COUNT,
+            uint64(block.timestamp + 1 days),
+            uint64(block.timestamp + 2 days),
+            payout
+        );
+    }
+
+    function test_RevertWhen_PayoutTotalOffByOne() public {
+        uint16[] memory payout = _linearPayout(TEAM_COUNT);
+        payout[TEAM_COUNT - 1] -= 1;
+
+        vm.expectRevert(
+            abi.encodeWithSelector(
+                LeagueTreasury.LeagueTreasury__InvalidPayoutTotal.selector,
+                9999
+            )
+        );
+        vm.prank(commissioner);
+        leagueTreasury.createLeague(
+            reporter,
+            BUY_IN,
+            TEAM_COUNT,
+            uint64(block.timestamp + 1 days),
+            uint64(block.timestamp + 2 days),
+            payout
+        );
+    }
 }
