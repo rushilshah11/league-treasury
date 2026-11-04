@@ -1,6 +1,6 @@
 -include .env
 
-.PHONY: all build test test-v coverage fmt snapshot anvil deploy-anvil clean
+.PHONY: all build test test-v coverage fmt snapshot anvil deploy-anvil clean abi frontend-install dev
 
 # Anvil's default account 0. This key is public and only valid on a local Anvil chain.
 # Never use it, or any key, on a real network from this file.
@@ -39,3 +39,17 @@ deploy-anvil:
 
 clean:
 	forge clean
+
+# ---------- Frontend ----------
+
+# Rebuild the contract and copy its ABI into the frontend
+abi:
+	forge build
+	cd frontend && node scripts/sync-abi.mjs
+
+frontend-install:
+	cd frontend && npm install
+
+# Start the frontend dev server at http://localhost:5173
+dev:
+	cd frontend && npm run dev
