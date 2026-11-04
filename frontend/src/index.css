@@ -2,40 +2,105 @@
 
 /*
   On-Chain Commish design tokens.
-  Graphite court with an orange-red flare. Square edges, no shadows.
+
+  1. Brand palette: the raw colors, named for what they are.
+  2. Semantic tokens: what each color is FOR (shadcn's naming). Components only use these,
+     so changing the theme means editing this file and nothing else.
+  3. Type scale: named text sizes, so components say text-display instead of text-7xl.
 */
-@theme {
+
+:root {
+  /* 1. Brand palette */
+  --graphite: #141311;
+  --graphite-raised: #1b1a17;
+  --graphite-line: #2c2a26;
+  --chalk: #ece8e1;
+  --dust: #8c877e;
+  --flare: #ff5a1f; /* orange-red */
+  --ember: #d7341e; /* deeper red */
+
+  /* 2. Semantic tokens */
+  --background: var(--graphite);
+  --foreground: var(--chalk);
+  --card: var(--graphite-raised);
+  --card-foreground: var(--chalk);
+  --popover: var(--graphite-raised);
+  --popover-foreground: var(--chalk);
+  --primary: var(--flare);
+  --primary-foreground: var(--graphite);
+  --primary-hover: var(--ember);
+  --secondary: var(--graphite-raised);
+  --secondary-foreground: var(--chalk);
+  --muted: var(--graphite-raised);
+  --muted-foreground: var(--dust);
+  --accent: var(--ember);
+  --accent-foreground: var(--chalk);
+  --destructive: #ff3b30;
+  --border: var(--graphite-line);
+  --input: var(--graphite-line);
+  --ring: var(--flare);
+  --radius: 0;
+}
+
+@theme inline {
   --font-sans: Calibri, Carlito, "Segoe UI", system-ui, sans-serif;
 
-  --color-ink: #141311;       /* page background: warm graphite */
-  --color-panel: #1b1a17;     /* slightly raised surfaces */
-  --color-line: #2c2a26;      /* 1px rules and borders */
-  --color-chalk: #ece8e1;     /* primary text */
-  --color-dust: #8c877e;      /* secondary text */
-  --color-flare: #ff5a1f;     /* orange-red: primary actions and highlights */
-  --color-ember: #d7341e;     /* deeper red: hover states and secondary accents */
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-primary-hover: var(--primary-hover);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-destructive: var(--destructive);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
 
-  /* No rounded corners anywhere, including third-party components. */
-  --radius-sm: 0;
-  --radius: 0;
-  --radius-md: 0;
-  --radius-lg: 0;
-  --radius-xl: 0;
+  /* Square corners everywhere */
+  --radius-sm: var(--radius);
+  --radius-md: var(--radius);
+  --radius-lg: var(--radius);
+  --radius-xl: var(--radius);
+
+  /* 3. Type scale */
+  --text-display: clamp(3.75rem, 9vw, 6rem);
+  --text-display--line-height: 0.95;
+  --text-display--letter-spacing: -0.02em;
+  --text-title: clamp(1.75rem, 3.5vw, 2.25rem);
+  --text-title--line-height: 1.1;
+  --text-title--letter-spacing: -0.01em;
+  --text-tagline: clamp(1.5rem, 3vw, 1.875rem);
+  --text-tagline--line-height: 1.2;
+  --text-heading: 1.25rem;
+  --text-heading--line-height: 1.3;
+  --text-lead: 1.125rem;
+  --text-lead--line-height: 1.65;
+  --text-body: 1rem;
+  --text-body--line-height: 1.6;
+  --text-small: 0.9375rem;
+  --text-small--line-height: 1.5;
 }
 
-html {
-  font-feature-settings: "tnum" 1; /* tabular figures: numbers line up like a scoreboard */
-}
-
-body {
-  @apply bg-ink text-chalk font-sans antialiased;
-}
-
-::selection {
-  @apply bg-flare text-ink;
-}
-
-:focus-visible {
-  outline: 2px solid var(--color-flare);
-  outline-offset: 2px;
+@layer base {
+  * {
+    @apply border-border;
+  }
+  html {
+    font-feature-settings: "tnum" 1; /* tabular figures: numbers line up */
+  }
+  body {
+    @apply bg-background font-sans text-body text-foreground antialiased;
+  }
+  ::selection {
+    @apply bg-primary text-primary-foreground;
+  }
 }
