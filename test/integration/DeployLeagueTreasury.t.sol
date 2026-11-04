@@ -49,7 +49,7 @@ contract DeployLeagueTreasuryTest is Test {
         vm.prank(bob);
         leagueTreasury.joinLeague{value: BUY_IN}(leagueId, 2);
 
-        (, , , uint8 memberCount, LeagueTreasury.LeagueState state, , , , ) = leagueTreasury.leagues(leagueId);
+        (, , , uint8 memberCount, LeagueTreasury.LeagueState state, , , , , ) = leagueTreasury.leagues(leagueId);
         assertEq(memberCount, TEAM_COUNT);
         assertEq(uint8(state), uint8(LeagueTreasury.LeagueState.ACTIVE));
         assertEq(address(leagueTreasury).balance, BUY_IN * TEAM_COUNT);

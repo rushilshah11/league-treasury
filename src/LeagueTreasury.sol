@@ -44,6 +44,13 @@ contract LeagueTreasury {
         uint256 rankingLength
     );
     error LeagueTreasury__DuplicateTeam(uint32 teamId);
+    error LeagueTreasury__NotCommissioner(address caller);
+    error LeagueTreasury__NotMember(uint256 leagueId, address caller);
+    error LeagueTreasury__ChallengeWindowClosed(
+        uint256 leagueId,
+        uint256 closedAt
+    );
+    error LeagueTreasury__ChallengeWindowOpen(uint256 leagueId, uint256 closesAt);
 
     /*//////////////////////////////////////////////////////////////
                            TYPE DECLARATIONS
@@ -69,6 +76,7 @@ contract LeagueTreasury {
         uint64 standingsDeadline;
         uint256 buyIn;
         uint64 standingsSubmittedAt;
+        uint64 disputedAt;
     }
 
     struct Member {
@@ -109,6 +117,9 @@ contract LeagueTreasury {
     );
     event LeagueActivated(uint256 indexed leagueId);
     event StandingsSubmitted(uint256 indexed leagueId, uint64 submittedAt);
+    event StandingsDisputed(uint256 indexed leagueId, address indexed member);
+    event StandingsFinalized(uint256 indexed leagueId);
+    event DisputeResolved(uint256 indexed leagueId);
 
     /*//////////////////////////////////////////////////////////////
                                MODIFIERS
@@ -124,6 +135,13 @@ contract LeagueTreasury {
     modifier onlyReporter(uint256 leagueId) {
         if (msg.sender != leagues[leagueId].reporter) {
             revert LeagueTreasury__NotReporter(msg.sender);
+        }
+        _;
+    }
+
+    modifier onlyCommissioner(uint256 leagueId) {
+        if (msg.sender != leagues[leagueId].commissioner) {
+            revert LeagueTreasury__NotCommissioner(msg.sender);
         }
         _;
     }
@@ -183,7 +201,8 @@ contract LeagueTreasury {
             reporter: reporter,
             standingsDeadline: standingsDeadline,
             buyIn: buyIn,
-            standingsSubmittedAt: 0
+            standingsSubmittedAt: 0,
+            disputedAt: 0
         });
         payoutBps[leagueId] = payout;
 
@@ -231,6 +250,39 @@ contract LeagueTreasury {
         emit MemberJoined(leagueId, msg.sender, teamId);
     }
 
+    function _recordStandings(
+        uint256 leagueId,
+        uint32[] calldata rankedTeamIds
+    ) internal {
+        League storage league = leagues[leagueId];
+
+        if (rankedTeamIds.length != league.teamCount) {
+            revert LeagueTreasury__RankingLengthMismatch(
+                league.teamCount,
+                rankedTeamIds.length
+            );
+        }
+        // reset to 0 before setting finalPlace to avoid duplicate team errors on re-submission
+        for (uint32 i = 0; i < rankedTeamIds.length; i++) {
+            address owner = teamOwners[leagueId][rankedTeamIds[i]];
+            members[leagueId][owner].finalPlace = 0;
+        }
+
+        for (uint32 i = 0; i < rankedTeamIds.length; i++) {
+            uint32 teamId = rankedTeamIds[i];
+            address owner = teamOwners[leagueId][teamId];
+            if (teamId == 0 || owner == address(0)) {
+                revert LeagueTreasury__InvalidTeamId(teamId);
+            }
+
+            Member storage member = members[leagueId][owner];
+            if (member.finalPlace != 0) {
+                revert LeagueTreasury__DuplicateTeam(teamId);
+            }
+            member.finalPlace = uint8(i + 1);
+        }
+    }
+
     function submitStandings(
         uint256 leagueId,
         uint32[] calldata rankedTeamIds
@@ -251,26 +303,7 @@ contract LeagueTreasury {
             );
         }
 
-        if (rankedTeamIds.length != league.teamCount) {
-            revert LeagueTreasury__RankingLengthMismatch(
-                league.teamCount,
-                rankedTeamIds.length
-            );
-        }
-
-        for (uint32 i = 0; i < rankedTeamIds.length; i++) {
-            uint32 teamId = rankedTeamIds[i];
-            address owner = teamOwners[leagueId][teamId];
-            if (teamId == 0 || owner == address(0)) {
-                revert LeagueTreasury__InvalidTeamId(teamId);
-            }
-
-            Member storage member = members[leagueId][owner];
-            if (member.finalPlace != 0) {
-                revert LeagueTreasury__DuplicateTeam(teamId);
-            }
-            member.finalPlace = uint8(i + 1);
-        }
+        _recordStandings(leagueId, rankedTeamIds);
 
         uint64 submittedAt = uint64(block.timestamp);
         league.state = LeagueState.STANDINGS_SUBMITTED;
@@ -279,6 +312,67 @@ contract LeagueTreasury {
         emit StandingsSubmitted(leagueId, submittedAt);
     }
 
+    function dispute(uint256 leagueId) external leagueExists(leagueId) {
+        Member storage member = members[leagueId][msg.sender];
+        if (!member.joined) {
+            revert LeagueTreasury__NotMember(leagueId, msg.sender);
+        }
+
+        League storage league = leagues[leagueId];
+        if (league.state != LeagueState.STANDINGS_SUBMITTED) {
+            revert LeagueTreasury__InvalidState(
+                leagueId,
+                LeagueState.STANDINGS_SUBMITTED,
+                league.state
+            );
+        }
+
+        uint256 windowEnd = league.standingsSubmittedAt + CHALLENGE_WINDOW;
+        if (block.timestamp >= windowEnd) {
+            revert LeagueTreasury__ChallengeWindowClosed(leagueId, windowEnd);
+        }
+
+        league.state = LeagueState.DISPUTED;
+        league.disputedAt = uint64(block.timestamp);
+        emit StandingsDisputed(leagueId, msg.sender);
+    }
+
+    function finalize(uint256 leagueId) external leagueExists(leagueId) {
+        League storage league = leagues[leagueId];
+        if (league.state != LeagueState.STANDINGS_SUBMITTED) {
+            revert LeagueTreasury__InvalidState(
+                leagueId,
+                LeagueState.STANDINGS_SUBMITTED,
+                league.state
+            );
+        }
+
+        uint256 windowEnd = league.standingsSubmittedAt + CHALLENGE_WINDOW;
+        if (block.timestamp < windowEnd) {
+            revert LeagueTreasury__ChallengeWindowOpen(leagueId, windowEnd);
+        }
+
+        league.state = LeagueState.FINALIZED;
+        emit StandingsFinalized(leagueId);
+    }
+
+    function resolveDispute(
+        uint256 leagueId,
+        uint32[] calldata correctedRanking
+    ) external leagueExists(leagueId) onlyCommissioner(leagueId) {
+        League storage league = leagues[leagueId];
+        if (league.state != LeagueState.DISPUTED) {
+            revert LeagueTreasury__InvalidState(
+                leagueId,
+                LeagueState.DISPUTED,
+                league.state
+            );
+        }
+
+        _recordStandings(leagueId, correctedRanking);
+        league.state = LeagueState.FINALIZED;
+        emit DisputeResolved(leagueId);
+    }
     /*//////////////////////////////////////////////////////////////
                              VIEW FUNCTIONS
     //////////////////////////////////////////////////////////////*/

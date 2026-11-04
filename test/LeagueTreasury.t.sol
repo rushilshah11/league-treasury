@@ -93,16 +93,41 @@ contract LeagueTreasuryTest is Test {
         (, , , finalPlace) = leagueTreasury.members(leagueId, who);
     }
 
+    /// Active league with standings submitted (team i in place i). Window is open.
+    function _submittedLeague() internal returns (uint256 leagueId) {
+        leagueId = _activeLeague();
+        _submit(leagueId, _ranking());
+    }
+
+    /// Submitted league that member1 (team 1's owner) has disputed.
+    function _disputedLeague() internal returns (uint256 leagueId) {
+        leagueId = _submittedLeague();
+        vm.prank(_member(1));
+        leagueTreasury.dispute(leagueId);
+    }
+
+    /// Ranking where team 14 wins and team 1 is last.
+    function _reversedRanking() internal pure returns (uint32[] memory ranking) {
+        ranking = new uint32[](TEAM_COUNT);
+        for (uint32 i = 0; i < TEAM_COUNT; i++) {
+            ranking[i] = TEAM_COUNT - i;
+        }
+    }
+
+    function _disputedAt(uint256 leagueId) internal view returns (uint64 disputedAt) {
+        (, , , , , , , , , disputedAt) = leagueTreasury.leagues(leagueId);
+    }
+
     function _state(
         uint256 leagueId
     ) internal view returns (LeagueTreasury.LeagueState state) {
-        (, , , , state, , , , ) = leagueTreasury.leagues(leagueId);
+        (, , , , state, , , , , ) = leagueTreasury.leagues(leagueId);
     }
 
     function _memberCount(
         uint256 leagueId
     ) internal view returns (uint8 memberCount) {
-        (, , , memberCount, , , , , ) = leagueTreasury.leagues(leagueId);
+        (, , , memberCount, , , , , , ) = leagueTreasury.leagues(leagueId);
     }
 
     function setUp() public {
@@ -135,7 +160,7 @@ contract LeagueTreasuryTest is Test {
             address r,
             uint64 standingsDeadline,
             uint256 buyIn,
-            uint64 standingsSubmittedAt
+            uint64 standingsSubmittedAt,
         ) = leagueTreasury.leagues(leagueId);
 
         assertEq(c, commissioner);
@@ -589,7 +614,7 @@ contract LeagueTreasuryTest is Test {
         uint256 leagueId = _activeLeague();
         _submit(leagueId, _ranking());
 
-        (, , , , LeagueTreasury.LeagueState state, , , , uint64 submittedAt) = leagueTreasury
+        (, , , , LeagueTreasury.LeagueState state, , , , uint64 submittedAt, ) = leagueTreasury
             .leagues(leagueId);
         assertEq(
             uint8(state),
@@ -752,5 +777,313 @@ contract LeagueTreasuryTest is Test {
             )
         );
         _submit(leagueId, ranking);
+    }
+
+    /*//////////////////////////////////////////////////////////////
+                                 dispute
+    //////////////////////////////////////////////////////////////*/
+
+    function test_Dispute_SetsStateAndTimestamp() public {
+        uint256 leagueId = _submittedLeague();
+        vm.warp(block.timestamp + 1 hours);
+
+        vm.prank(_member(1));
+        leagueTreasury.dispute(leagueId);
+
+        assertEq(uint8(_state(leagueId)), uint8(LeagueTreasury.LeagueState.DISPUTED));
+        assertEq(_disputedAt(leagueId), uint64(block.timestamp));
+    }
+
+    function test_Dispute_EmitsEvent() public {
+        uint256 leagueId = _submittedLeague();
+        address disputer = _member(3);
+
+        vm.expectEmit(true, true, true, true);
+        emit LeagueTreasury.StandingsDisputed(leagueId, disputer);
+        vm.prank(disputer);
+        leagueTreasury.dispute(leagueId);
+    }
+
+    function test_Dispute_OneSecondBeforeWindowCloses() public {
+        uint256 leagueId = _submittedLeague();
+        vm.warp(block.timestamp + leagueTreasury.CHALLENGE_WINDOW() - 1);
+
+        vm.prank(_member(1));
+        leagueTreasury.dispute(leagueId);
+
+        assertEq(uint8(_state(leagueId)), uint8(LeagueTreasury.LeagueState.DISPUTED));
+    }
+
+    function test_RevertWhen_NonMemberDisputes() public {
+        uint256 leagueId = _submittedLeague();
+
+        vm.expectRevert(
+            abi.encodeWithSelector(LeagueTreasury.LeagueTreasury__NotMember.selector, leagueId, alice)
+        );
+        vm.prank(alice); // alice never joined this league
+        leagueTreasury.dispute(leagueId);
+    }
+
+    function test_RevertWhen_DisputingBeforeStandingsSubmitted() public {
+        uint256 leagueId = _activeLeague();
+
+        vm.expectRevert(
+            abi.encodeWithSelector(
+                LeagueTreasury.LeagueTreasury__InvalidState.selector,
+                leagueId,
+                LeagueTreasury.LeagueState.STANDINGS_SUBMITTED,
+                LeagueTreasury.LeagueState.ACTIVE
+            )
+        );
+        vm.prank(_member(1));
+        leagueTreasury.dispute(leagueId);
+    }
+
+    function test_RevertWhen_DisputingTwice() public {
+        uint256 leagueId = _disputedLeague();
+
+        vm.expectRevert(
+            abi.encodeWithSelector(
+                LeagueTreasury.LeagueTreasury__InvalidState.selector,
+                leagueId,
+                LeagueTreasury.LeagueState.STANDINGS_SUBMITTED,
+                LeagueTreasury.LeagueState.DISPUTED
+            )
+        );
+        vm.prank(_member(2));
+        leagueTreasury.dispute(leagueId);
+    }
+
+    function test_RevertWhen_DisputingAtWindowClose() public {
+        uint256 leagueId = _submittedLeague();
+        uint256 windowEnd = block.timestamp + leagueTreasury.CHALLENGE_WINDOW();
+        vm.warp(windowEnd);
+
+        vm.expectRevert(
+            abi.encodeWithSelector(
+                LeagueTreasury.LeagueTreasury__ChallengeWindowClosed.selector,
+                leagueId,
+                windowEnd
+            )
+        );
+        vm.prank(_member(1));
+        leagueTreasury.dispute(leagueId);
+    }
+
+    /*//////////////////////////////////////////////////////////////
+                                finalize
+    //////////////////////////////////////////////////////////////*/
+
+    function test_Finalize_AtWindowClose() public {
+        uint256 leagueId = _submittedLeague();
+        vm.warp(block.timestamp + leagueTreasury.CHALLENGE_WINDOW());
+
+        leagueTreasury.finalize(leagueId);
+
+        assertEq(uint8(_state(leagueId)), uint8(LeagueTreasury.LeagueState.FINALIZED));
+    }
+
+    function test_Finalize_AnyoneCanCall() public {
+        uint256 leagueId = _submittedLeague();
+        vm.warp(block.timestamp + leagueTreasury.CHALLENGE_WINDOW());
+
+        vm.prank(makeAddr("randomStranger"));
+        leagueTreasury.finalize(leagueId);
+
+        assertEq(uint8(_state(leagueId)), uint8(LeagueTreasury.LeagueState.FINALIZED));
+    }
+
+    function test_Finalize_EmitsEvent() public {
+        uint256 leagueId = _submittedLeague();
+        vm.warp(block.timestamp + leagueTreasury.CHALLENGE_WINDOW());
+
+        vm.expectEmit(true, true, true, true);
+        emit LeagueTreasury.StandingsFinalized(leagueId);
+        leagueTreasury.finalize(leagueId);
+    }
+
+    function test_RevertWhen_FinalizingWhileWindowOpen() public {
+        uint256 leagueId = _submittedLeague();
+        uint256 windowEnd = block.timestamp + leagueTreasury.CHALLENGE_WINDOW();
+        vm.warp(windowEnd - 1);
+
+        vm.expectRevert(
+            abi.encodeWithSelector(
+                LeagueTreasury.LeagueTreasury__ChallengeWindowOpen.selector,
+                leagueId,
+                windowEnd
+            )
+        );
+        leagueTreasury.finalize(leagueId);
+    }
+
+    function test_RevertWhen_FinalizingDisputedLeague() public {
+        uint256 leagueId = _disputedLeague();
+        vm.warp(block.timestamp + leagueTreasury.CHALLENGE_WINDOW());
+
+        vm.expectRevert(
+            abi.encodeWithSelector(
+                LeagueTreasury.LeagueTreasury__InvalidState.selector,
+                leagueId,
+                LeagueTreasury.LeagueState.STANDINGS_SUBMITTED,
+                LeagueTreasury.LeagueState.DISPUTED
+            )
+        );
+        leagueTreasury.finalize(leagueId);
+    }
+
+    function test_RevertWhen_FinalizingBeforeStandings() public {
+        uint256 leagueId = _activeLeague();
+
+        vm.expectRevert(
+            abi.encodeWithSelector(
+                LeagueTreasury.LeagueTreasury__InvalidState.selector,
+                leagueId,
+                LeagueTreasury.LeagueState.STANDINGS_SUBMITTED,
+                LeagueTreasury.LeagueState.ACTIVE
+            )
+        );
+        leagueTreasury.finalize(leagueId);
+    }
+
+    function test_RevertWhen_FinalizingTwice() public {
+        uint256 leagueId = _submittedLeague();
+        vm.warp(block.timestamp + leagueTreasury.CHALLENGE_WINDOW());
+        leagueTreasury.finalize(leagueId);
+
+        vm.expectRevert(
+            abi.encodeWithSelector(
+                LeagueTreasury.LeagueTreasury__InvalidState.selector,
+                leagueId,
+                LeagueTreasury.LeagueState.STANDINGS_SUBMITTED,
+                LeagueTreasury.LeagueState.FINALIZED
+            )
+        );
+        leagueTreasury.finalize(leagueId);
+    }
+
+    /*//////////////////////////////////////////////////////////////
+                             resolveDispute
+    //////////////////////////////////////////////////////////////*/
+
+    function test_ResolveDispute_ReplacesPlaces() public {
+        uint256 leagueId = _disputedLeague();
+
+        vm.prank(commissioner);
+        leagueTreasury.resolveDispute(leagueId, _reversedRanking());
+
+        for (uint32 teamId = 1; teamId <= TEAM_COUNT; teamId++) {
+            // team 14 is now 1st, team 1 is now 14th
+            assertEq(_finalPlace(leagueId, _member(teamId)), TEAM_COUNT - teamId + 1);
+        }
+    }
+
+    function test_ResolveDispute_WithSameRanking() public {
+        // the commissioner can also confirm the original standings
+        uint256 leagueId = _disputedLeague();
+
+        vm.prank(commissioner);
+        leagueTreasury.resolveDispute(leagueId, _ranking());
+
+        assertEq(_finalPlace(leagueId, _member(1)), 1);
+        assertEq(uint8(_state(leagueId)), uint8(LeagueTreasury.LeagueState.FINALIZED));
+    }
+
+    function test_ResolveDispute_FinalizesAndEmits() public {
+        uint256 leagueId = _disputedLeague();
+        uint32[] memory corrected = _reversedRanking();
+
+        vm.expectEmit(true, true, true, true);
+        emit LeagueTreasury.DisputeResolved(leagueId);
+        vm.prank(commissioner);
+        leagueTreasury.resolveDispute(leagueId, corrected);
+
+        assertEq(uint8(_state(leagueId)), uint8(LeagueTreasury.LeagueState.FINALIZED));
+    }
+
+    function test_RevertWhen_NonCommissionerResolves() public {
+        uint256 leagueId = _disputedLeague();
+        uint32[] memory corrected = _reversedRanking();
+
+        vm.expectRevert(
+            abi.encodeWithSelector(LeagueTreasury.LeagueTreasury__NotCommissioner.selector, reporter)
+        );
+        vm.prank(reporter); // even the reporter can't resolve disputes
+        leagueTreasury.resolveDispute(leagueId, corrected);
+    }
+
+    function test_RevertWhen_ResolvingUndisputedLeague() public {
+        uint256 leagueId = _submittedLeague();
+        uint32[] memory corrected = _reversedRanking();
+
+        vm.expectRevert(
+            abi.encodeWithSelector(
+                LeagueTreasury.LeagueTreasury__InvalidState.selector,
+                leagueId,
+                LeagueTreasury.LeagueState.DISPUTED,
+                LeagueTreasury.LeagueState.STANDINGS_SUBMITTED
+            )
+        );
+        vm.prank(commissioner);
+        leagueTreasury.resolveDispute(leagueId, corrected);
+    }
+
+    function test_RevertWhen_CorrectedRankingTooShort() public {
+        uint256 leagueId = _disputedLeague();
+        uint32[] memory corrected = new uint32[](TEAM_COUNT - 1);
+        for (uint32 i = 0; i < TEAM_COUNT - 1; i++) {
+            corrected[i] = i + 1;
+        }
+
+        vm.expectRevert(
+            abi.encodeWithSelector(
+                LeagueTreasury.LeagueTreasury__RankingLengthMismatch.selector,
+                TEAM_COUNT,
+                TEAM_COUNT - 1
+            )
+        );
+        vm.prank(commissioner);
+        leagueTreasury.resolveDispute(leagueId, corrected);
+    }
+
+    function test_RevertWhen_CorrectedRankingHasDuplicate() public {
+        uint256 leagueId = _disputedLeague();
+        uint32[] memory corrected = _reversedRanking();
+        corrected[1] = corrected[0]; // team 14 listed twice, team 13 missing
+
+        vm.expectRevert(
+            abi.encodeWithSelector(LeagueTreasury.LeagueTreasury__DuplicateTeam.selector, TEAM_COUNT)
+        );
+        vm.prank(commissioner);
+        leagueTreasury.resolveDispute(leagueId, corrected);
+    }
+
+    function test_RevertWhen_CorrectedRankingHasUnknownTeam() public {
+        uint256 leagueId = _disputedLeague();
+        uint32[] memory corrected = _reversedRanking();
+        corrected[3] = 99;
+
+        vm.expectRevert(
+            abi.encodeWithSelector(LeagueTreasury.LeagueTreasury__InvalidTeamId.selector, 99)
+        );
+        vm.prank(commissioner);
+        leagueTreasury.resolveDispute(leagueId, corrected);
+    }
+
+    function test_RevertWhen_DisputingAfterResolution() public {
+        uint256 leagueId = _disputedLeague();
+        vm.prank(commissioner);
+        leagueTreasury.resolveDispute(leagueId, _reversedRanking());
+
+        vm.expectRevert(
+            abi.encodeWithSelector(
+                LeagueTreasury.LeagueTreasury__InvalidState.selector,
+                leagueId,
+                LeagueTreasury.LeagueState.STANDINGS_SUBMITTED,
+                LeagueTreasury.LeagueState.FINALIZED
+            )
+        );
+        vm.prank(_member(2));
+        leagueTreasury.dispute(leagueId);
     }
 }
