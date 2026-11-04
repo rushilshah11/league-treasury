@@ -14,6 +14,8 @@ contract LeagueTreasuryTest is Test {
 
     uint256 constant BUY_IN = 0.01 ether;
     uint8 constant TEAM_COUNT = 14;
+    string constant LEAGUE_NAME = "Shah Family League";
+    uint64 constant ESPN_LEAGUE_ID = 12345678;
     uint256 constant STARTING_BALANCE = 1 ether;
 
     /*//////////////////////////////////////////////////////////////
@@ -39,7 +41,14 @@ contract LeagueTreasuryTest is Test {
         uint16[] memory payout = _linearPayout(TEAM_COUNT);
         vm.prank(commissioner);
         leagueId = leagueTreasury.createLeague(
-            reporter, BUY_IN, TEAM_COUNT, uint64(block.timestamp + 1 days), uint64(block.timestamp + 2 days), payout
+            LEAGUE_NAME,
+            ESPN_LEAGUE_ID,
+            reporter,
+            BUY_IN,
+            TEAM_COUNT,
+            uint64(block.timestamp + 1 days),
+            uint64(block.timestamp + 2 days),
+            payout
         );
     }
 
@@ -128,6 +137,8 @@ contract LeagueTreasuryTest is Test {
     function _runFullLeague(uint8 teamCount, uint256 buyIn) internal returns (uint256 leagueId) {
         vm.prank(commissioner);
         leagueId = leagueTreasury.createLeague(
+            LEAGUE_NAME,
+            ESPN_LEAGUE_ID,
             reporter,
             buyIn,
             teamCount,
@@ -247,7 +258,7 @@ contract LeagueTreasuryTest is Test {
 
     function test_CreateLeague_EmitsEvent() public {
         vm.expectEmit(true, true, true, true);
-        emit LeagueTreasury.LeagueCreated(0, commissioner, reporter, TEAM_COUNT, BUY_IN);
+        emit LeagueTreasury.LeagueCreated(0, commissioner, reporter, TEAM_COUNT, BUY_IN, LEAGUE_NAME, ESPN_LEAGUE_ID);
         _createLeague();
     }
 
@@ -275,7 +286,14 @@ contract LeagueTreasuryTest is Test {
         vm.expectRevert(abi.encodeWithSelector(LeagueTreasury.LeagueTreasury__InvalidTeamCount.selector, 1));
         vm.prank(commissioner);
         leagueTreasury.createLeague(
-            reporter, BUY_IN, 1, uint64(block.timestamp + 1 days), uint64(block.timestamp + 2 days), payout
+            LEAGUE_NAME,
+            ESPN_LEAGUE_ID,
+            reporter,
+            BUY_IN,
+            1,
+            uint64(block.timestamp + 1 days),
+            uint64(block.timestamp + 2 days),
+            payout
         );
     }
 
@@ -289,7 +307,14 @@ contract LeagueTreasuryTest is Test {
         );
         vm.prank(commissioner);
         leagueTreasury.createLeague(
-            reporter, BUY_IN, TEAM_COUNT, uint64(block.timestamp + 1 days), uint64(block.timestamp + 2 days), payout
+            LEAGUE_NAME,
+            ESPN_LEAGUE_ID,
+            reporter,
+            BUY_IN,
+            TEAM_COUNT,
+            uint64(block.timestamp + 1 days),
+            uint64(block.timestamp + 2 days),
+            payout
         );
     }
 
@@ -299,7 +324,14 @@ contract LeagueTreasuryTest is Test {
         vm.expectRevert(abi.encodeWithSelector(LeagueTreasury.LeagueTreasury__InvalidBuyIn.selector, 0));
         vm.prank(commissioner);
         leagueTreasury.createLeague(
-            reporter, 0, TEAM_COUNT, uint64(block.timestamp + 1 days), uint64(block.timestamp + 2 days), payout
+            LEAGUE_NAME,
+            ESPN_LEAGUE_ID,
+            reporter,
+            0,
+            TEAM_COUNT,
+            uint64(block.timestamp + 1 days),
+            uint64(block.timestamp + 2 days),
+            payout
         );
     }
 
@@ -309,7 +341,14 @@ contract LeagueTreasuryTest is Test {
         vm.expectRevert(abi.encodeWithSelector(LeagueTreasury.LeagueTreasury__InvalidReporter.selector, address(0)));
         vm.prank(commissioner);
         leagueTreasury.createLeague(
-            address(0), BUY_IN, TEAM_COUNT, uint64(block.timestamp + 1 days), uint64(block.timestamp + 2 days), payout
+            LEAGUE_NAME,
+            ESPN_LEAGUE_ID,
+            address(0),
+            BUY_IN,
+            TEAM_COUNT,
+            uint64(block.timestamp + 1 days),
+            uint64(block.timestamp + 2 days),
+            payout
         );
     }
 
@@ -322,7 +361,14 @@ contract LeagueTreasuryTest is Test {
         );
         vm.prank(commissioner);
         leagueTreasury.createLeague(
-            reporter, BUY_IN, TEAM_COUNT, joinDeadline, uint64(block.timestamp + 2 days), payout
+            LEAGUE_NAME,
+            ESPN_LEAGUE_ID,
+            reporter,
+            BUY_IN,
+            TEAM_COUNT,
+            joinDeadline,
+            uint64(block.timestamp + 2 days),
+            payout
         );
     }
 
@@ -337,7 +383,9 @@ contract LeagueTreasuryTest is Test {
             )
         );
         vm.prank(commissioner);
-        leagueTreasury.createLeague(reporter, BUY_IN, TEAM_COUNT, joinDeadline, standingsDeadline, payout);
+        leagueTreasury.createLeague(
+            LEAGUE_NAME, ESPN_LEAGUE_ID, reporter, BUY_IN, TEAM_COUNT, joinDeadline, standingsDeadline, payout
+        );
     }
 
     function test_RevertWhen_StandingsDeadlineEqualsJoinDeadline() public {
@@ -348,7 +396,9 @@ contract LeagueTreasuryTest is Test {
             abi.encodeWithSelector(LeagueTreasury.LeagueTreasury__InvalidStandingsDeadline.selector, deadline, deadline)
         );
         vm.prank(commissioner);
-        leagueTreasury.createLeague(reporter, BUY_IN, TEAM_COUNT, deadline, deadline, payout);
+        leagueTreasury.createLeague(
+            LEAGUE_NAME, ESPN_LEAGUE_ID, reporter, BUY_IN, TEAM_COUNT, deadline, deadline, payout
+        );
     }
 
     function test_RevertWhen_PayoutTotalWrong() public {
@@ -360,7 +410,14 @@ contract LeagueTreasuryTest is Test {
         vm.expectRevert(abi.encodeWithSelector(LeagueTreasury.LeagueTreasury__InvalidPayoutTotal.selector, TEAM_COUNT));
         vm.prank(commissioner);
         leagueTreasury.createLeague(
-            reporter, BUY_IN, TEAM_COUNT, uint64(block.timestamp + 1 days), uint64(block.timestamp + 2 days), payout
+            LEAGUE_NAME,
+            ESPN_LEAGUE_ID,
+            reporter,
+            BUY_IN,
+            TEAM_COUNT,
+            uint64(block.timestamp + 1 days),
+            uint64(block.timestamp + 2 days),
+            payout
         );
     }
 
@@ -371,7 +428,14 @@ contract LeagueTreasuryTest is Test {
         vm.expectRevert(abi.encodeWithSelector(LeagueTreasury.LeagueTreasury__InvalidPayoutTotal.selector, 9999));
         vm.prank(commissioner);
         leagueTreasury.createLeague(
-            reporter, BUY_IN, TEAM_COUNT, uint64(block.timestamp + 1 days), uint64(block.timestamp + 2 days), payout
+            LEAGUE_NAME,
+            ESPN_LEAGUE_ID,
+            reporter,
+            BUY_IN,
+            TEAM_COUNT,
+            uint64(block.timestamp + 1 days),
+            uint64(block.timestamp + 2 days),
+            payout
         );
     }
 
@@ -1490,6 +1554,8 @@ contract LeagueTreasuryTest is Test {
 
         vm.prank(commissioner);
         uint256 leagueId = leagueTreasury.createLeague(
+            LEAGUE_NAME,
+            ESPN_LEAGUE_ID,
             reporter,
             buyIn,
             TEAM_COUNT,
@@ -1511,5 +1577,47 @@ contract LeagueTreasuryTest is Test {
             assertEq(m.balance, buyIn);
         }
         assertEq(address(leagueTreasury).balance, 0);
+    }
+
+    /*//////////////////////////////////////////////////////////////
+                         createLeague: league name
+    //////////////////////////////////////////////////////////////*/
+
+    function _createLeagueNamed(string memory name) internal returns (uint256) {
+        uint16[] memory payout = _linearPayout(TEAM_COUNT);
+        vm.prank(commissioner);
+        return leagueTreasury.createLeague(
+            name,
+            ESPN_LEAGUE_ID,
+            reporter,
+            BUY_IN,
+            TEAM_COUNT,
+            uint64(block.timestamp + 1 days),
+            uint64(block.timestamp + 2 days),
+            payout
+        );
+    }
+
+    function test_CreateLeague_AcceptsMaxLengthName() public {
+        string memory name = "0123456789012345678901234567890123456789012345678901234567890123"; // 64 bytes
+        assertEq(bytes(name).length, leagueTreasury.MAX_NAME_LENGTH());
+        _createLeagueNamed(name);
+        assertEq(leagueTreasury.nextLeagueId(), 1);
+    }
+
+    function test_RevertWhen_NameIsEmpty() public {
+        vm.expectRevert(abi.encodeWithSelector(LeagueTreasury.LeagueTreasury__InvalidName.selector, 0));
+        this.createLeagueNamedExternal("");
+    }
+
+    function test_RevertWhen_NameTooLong() public {
+        string memory name = "01234567890123456789012345678901234567890123456789012345678901234"; // 65 bytes
+        vm.expectRevert(abi.encodeWithSelector(LeagueTreasury.LeagueTreasury__InvalidName.selector, 65));
+        this.createLeagueNamedExternal(name);
+    }
+
+    /// External wrapper so expectRevert applies to the whole createLeague call.
+    function createLeagueNamedExternal(string memory name) external returns (uint256) {
+        return _createLeagueNamed(name);
     }
 }

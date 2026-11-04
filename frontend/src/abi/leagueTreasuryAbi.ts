@@ -29,6 +29,19 @@ export const leagueTreasuryAbi = [
   },
   {
     "type": "function",
+    "name": "MAX_NAME_LENGTH",
+    "inputs": [],
+    "outputs": [
+      {
+        "name": "",
+        "type": "uint256",
+        "internalType": "uint256"
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
     "name": "TOTAL_BPS",
     "inputs": [],
     "outputs": [
@@ -70,6 +83,16 @@ export const leagueTreasuryAbi = [
     "type": "function",
     "name": "createLeague",
     "inputs": [
+      {
+        "name": "name",
+        "type": "string",
+        "internalType": "string"
+      },
+      {
+        "name": "espnLeagueId",
+        "type": "uint64",
+        "internalType": "uint64"
+      },
       {
         "name": "reporter",
         "type": "address",
@@ -501,6 +524,18 @@ export const leagueTreasuryAbi = [
         "type": "uint256",
         "indexed": false,
         "internalType": "uint256"
+      },
+      {
+        "name": "name",
+        "type": "string",
+        "indexed": false,
+        "internalType": "string"
+      },
+      {
+        "name": "espnLeagueId",
+        "type": "uint64",
+        "indexed": false,
+        "internalType": "uint64"
       }
     ],
     "anonymous": false
@@ -741,6 +776,17 @@ export const leagueTreasuryAbi = [
         "name": "joinDeadline",
         "type": "uint64",
         "internalType": "uint64"
+      }
+    ]
+  },
+  {
+    "type": "error",
+    "name": "LeagueTreasury__InvalidName",
+    "inputs": [
+      {
+        "name": "length",
+        "type": "uint256",
+        "internalType": "uint256"
       }
     ]
   },
