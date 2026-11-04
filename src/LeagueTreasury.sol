@@ -51,6 +51,8 @@ contract LeagueTreasury {
         uint256 closedAt
     );
     error LeagueTreasury__ChallengeWindowOpen(uint256 leagueId, uint256 closesAt);
+    error LeagueTreasury__AlreadyClaimed(uint256 leagueId, address member);
+    error LeagueTreasury__TransferFailed(address recipient, uint256 amount);
 
     /*//////////////////////////////////////////////////////////////
                            TYPE DECLARATIONS
@@ -120,6 +122,11 @@ contract LeagueTreasury {
     event StandingsDisputed(uint256 indexed leagueId, address indexed member);
     event StandingsFinalized(uint256 indexed leagueId);
     event DisputeResolved(uint256 indexed leagueId);
+    event PayoutClaimed(
+        uint256 indexed leagueId,
+        address indexed member,
+        uint256 amount
+    );
 
     /*//////////////////////////////////////////////////////////////
                                MODIFIERS
@@ -373,6 +380,63 @@ contract LeagueTreasury {
         league.state = LeagueState.FINALIZED;
         emit DisputeResolved(leagueId);
     }
+
+    function getPayout(uint256 leagueId, address member) public view returns (uint256) {
+        League storage league = leagues[leagueId];
+        Member storage m = members[leagueId][member];
+
+        if (!m.joined || league.state != LeagueState.FINALIZED) {
+            return 0;
+        }
+
+        uint256 pot = league.buyIn * league.memberCount;
+        uint16[] storage bps = payoutBps[leagueId];
+
+        if (m.finalPlace > 1) {
+            return (pot * bps[m.finalPlace - 1]) / TOTAL_BPS;
+        }
+
+        if (m.finalPlace == 1) {
+            uint256 othersTotal = 0;
+            for (uint256 i = 1; i < bps.length; i++) {
+                othersTotal += (pot * bps[i]) / TOTAL_BPS;
+            }
+            return pot - othersTotal;
+        }
+        return 0;
+    }
+
+    function claim(uint256 leagueId) external leagueExists(leagueId) {
+        League storage league = leagues[leagueId];
+        Member storage member = members[leagueId][msg.sender];
+
+        if (!member.joined) {
+            revert LeagueTreasury__NotMember(leagueId, msg.sender);
+        }
+        if (league.state != LeagueState.FINALIZED) {
+            revert LeagueTreasury__InvalidState(
+                leagueId,
+                LeagueState.FINALIZED,
+                league.state
+            );
+        }
+        if (member.claimed) {
+            revert LeagueTreasury__AlreadyClaimed(leagueId, msg.sender);
+        }
+
+        uint256 payout = getPayout(leagueId, msg.sender);
+        member.claimed = true;
+
+        if (payout > 0) {
+            (bool success, ) = payable(msg.sender).call{value: payout}("");
+            if (!success) {
+                revert LeagueTreasury__TransferFailed(msg.sender, payout);
+            }
+        }
+
+        emit PayoutClaimed(leagueId, msg.sender, payout);
+    }
+
     /*//////////////////////////////////////////////////////////////
                              VIEW FUNCTIONS
     //////////////////////////////////////////////////////////////*/

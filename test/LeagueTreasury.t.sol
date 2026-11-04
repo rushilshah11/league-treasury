@@ -3,6 +3,7 @@ pragma solidity ^0.8.24;
 
 import {Test} from "forge-std/Test.sol";
 import {LeagueTreasury} from "../src/LeagueTreasury.sol";
+import {RejectingWallet, ReentrantWallet} from "./mocks/MaliciousWallets.sol";
 
 contract LeagueTreasuryTest is Test {
     LeagueTreasury public leagueTreasury;
@@ -116,6 +117,83 @@ contract LeagueTreasuryTest is Test {
 
     function _disputedAt(uint256 leagueId) internal view returns (uint64 disputedAt) {
         (, , , , , , , , , disputedAt) = leagueTreasury.leagues(leagueId);
+    }
+
+    /// Submitted league with the challenge window passed and finalize() called.
+    function _finalizedLeague() internal returns (uint256 leagueId) {
+        leagueId = _submittedLeague();
+        vm.warp(block.timestamp + leagueTreasury.CHALLENGE_WINDOW());
+        leagueTreasury.finalize(leagueId);
+    }
+
+    function _claim(address who, uint256 leagueId) internal returns (uint256 received) {
+        uint256 before = who.balance;
+        vm.prank(who);
+        leagueTreasury.claim(leagueId);
+        received = who.balance - before;
+    }
+
+    /// Runs a full league of `teamCount` teams with `buyIn`, from creation to
+    /// finalization. Team i finishes in place i. Members are named "fm<i>".
+    function _runFullLeague(uint8 teamCount, uint256 buyIn) internal returns (uint256 leagueId) {
+        vm.prank(commissioner);
+        leagueId = leagueTreasury.createLeague(
+            reporter,
+            buyIn,
+            teamCount,
+            uint64(block.timestamp + 1 days),
+            uint64(block.timestamp + 2 days),
+            _linearPayout(teamCount)
+        );
+        uint32[] memory ranking = new uint32[](teamCount);
+        for (uint32 i = 1; i <= teamCount; i++) {
+            address m = makeAddr(string.concat("fm", vm.toString(i)));
+            vm.deal(m, buyIn);
+            vm.prank(m);
+            leagueTreasury.joinLeague{value: buyIn}(leagueId, i);
+            ranking[i - 1] = i;
+        }
+        _submit(leagueId, ranking);
+        vm.warp(block.timestamp + leagueTreasury.CHALLENGE_WINDOW());
+        leagueTreasury.finalize(leagueId);
+    }
+
+    /// Joins all teams except the last, then has `wallet` join with the last team.
+    /// Returns the league after standings are finalized, with the wallet in `place`.
+    function _finalizedLeagueWithContractMember(address wallet, bool isReentrant, uint32 place)
+        internal
+        returns (uint256 leagueId)
+    {
+        leagueId = _createLeague();
+        for (uint32 i = 1; i < TEAM_COUNT; i++) {
+            address member = _member(i);
+            vm.deal(member, STARTING_BALANCE);
+            _join(member, leagueId, i);
+        }
+        vm.deal(address(this), BUY_IN);
+        if (isReentrant) {
+            ReentrantWallet(payable(wallet)).join{value: BUY_IN}(leagueId, TEAM_COUNT);
+        } else {
+            RejectingWallet(wallet).join{value: BUY_IN}(leagueId, TEAM_COUNT);
+        }
+
+        // put the contract wallet's team (TEAM_COUNT) in `place`
+        uint32[] memory ranking = new uint32[](TEAM_COUNT);
+        uint32 next = 1;
+        for (uint32 pos = 1; pos <= TEAM_COUNT; pos++) {
+            if (pos == place) {
+                ranking[pos - 1] = TEAM_COUNT;
+            } else {
+                ranking[pos - 1] = next++;
+            }
+        }
+        _submit(leagueId, ranking);
+        vm.warp(block.timestamp + leagueTreasury.CHALLENGE_WINDOW());
+        leagueTreasury.finalize(leagueId);
+    }
+
+    function _claimed(uint256 leagueId, address who) internal view returns (bool claimed) {
+        (, , claimed, ) = leagueTreasury.members(leagueId, who);
     }
 
     function _state(
@@ -1085,5 +1163,238 @@ contract LeagueTreasuryTest is Test {
         );
         vm.prank(_member(2));
         leagueTreasury.dispute(leagueId);
+    }
+
+    /*//////////////////////////////////////////////////////////////
+                           getPayout and claim
+    //////////////////////////////////////////////////////////////*/
+
+    function test_GetPayout_ZeroBeforeFinalized() public {
+        uint256 leagueId = _submittedLeague();
+        assertEq(leagueTreasury.getPayout(leagueId, _member(1)), 0);
+    }
+
+    function test_GetPayout_ZeroForNonMember() public {
+        uint256 leagueId = _finalizedLeague();
+        assertEq(leagueTreasury.getPayout(leagueId, alice), 0);
+    }
+
+    function test_GetPayout_MatchesPayoutTable() public {
+        uint256 leagueId = _finalizedLeague();
+        uint256 pot = BUY_IN * TEAM_COUNT;
+        uint16[] memory bps = _linearPayout(TEAM_COUNT);
+
+        // places 2..14 get exactly their share of the pot
+        for (uint32 place = 2; place <= TEAM_COUNT; place++) {
+            assertEq(
+                leagueTreasury.getPayout(leagueId, _member(place)),
+                (pot * bps[place - 1]) / 10000
+            );
+        }
+    }
+
+    function test_GetPayout_FirstPlaceGetsRoundingRemainder() public {
+        // a 10 wei buy-in makes a 140 wei pot, so rounding leaves dust
+        uint256 leagueId = _runFullLeague(TEAM_COUNT, 10);
+        uint256 pot = 140;
+        uint16[] memory bps = _linearPayout(TEAM_COUNT);
+
+        uint256 othersTotal;
+        for (uint256 i = 1; i < TEAM_COUNT; i++) {
+            othersTotal += (pot * bps[i]) / 10000;
+        }
+        uint256 first = leagueTreasury.getPayout(leagueId, makeAddr("fm1"));
+
+        assertEq(first, pot - othersTotal);
+        assertGt(first, (pot * bps[0]) / 10000); // strictly more than its plain share
+    }
+
+    function test_Claim_PaysMemberTheirPayout() public {
+        uint256 leagueId = _finalizedLeague();
+        uint256 expected = leagueTreasury.getPayout(leagueId, _member(3));
+
+        uint256 received = _claim(_member(3), leagueId);
+
+        assertEq(received, expected);
+        assertGt(received, 0);
+    }
+
+    function test_Claim_MarksClaimed() public {
+        uint256 leagueId = _finalizedLeague();
+        _claim(_member(1), leagueId);
+        assertTrue(_claimed(leagueId, _member(1)));
+        assertFalse(_claimed(leagueId, _member(2)));
+    }
+
+    function test_Claim_EmitsEvent() public {
+        uint256 leagueId = _finalizedLeague();
+        uint256 expected = leagueTreasury.getPayout(leagueId, _member(1));
+
+        vm.expectEmit(true, true, true, true);
+        emit LeagueTreasury.PayoutClaimed(leagueId, _member(1), expected);
+        _claim(_member(1), leagueId);
+    }
+
+    function test_Claim_EveryonePaidAndContractEmptied() public {
+        uint256 leagueId = _finalizedLeague();
+        uint256 totalPaid;
+        for (uint32 i = 1; i <= TEAM_COUNT; i++) {
+            totalPaid += _claim(_member(i), leagueId);
+        }
+        assertEq(totalPaid, BUY_IN * TEAM_COUNT);
+        assertEq(address(leagueTreasury).balance, 0);
+    }
+
+    function test_Claim_AfterDisputeUsesCorrectedPlaces() public {
+        uint256 leagueId = _disputedLeague();
+        vm.prank(commissioner);
+        leagueTreasury.resolveDispute(leagueId, _reversedRanking());
+
+        // team 14 now finished 1st, so its owner gets the biggest payout
+        uint256 lastToFirst = _claim(_member(TEAM_COUNT), leagueId);
+        uint256 firstToLast = _claim(_member(1), leagueId);
+        assertGt(lastToFirst, firstToLast);
+    }
+
+    function test_Claim_OnlyAffectsOneLeague() public {
+        // two leagues' funds sit in one contract; claims must not mix them
+        uint256 leagueA = _finalizedLeague();
+        _createLeague(); // league B, open, holds no claims yet
+        _join(alice, 1, 1);
+
+        for (uint32 i = 1; i <= TEAM_COUNT; i++) {
+            _claim(_member(i), leagueA);
+        }
+        assertEq(address(leagueTreasury).balance, BUY_IN); // alice's buy-in in league B is untouched
+    }
+
+    function test_RevertWhen_NonMemberClaims() public {
+        uint256 leagueId = _finalizedLeague();
+
+        vm.expectRevert(
+            abi.encodeWithSelector(LeagueTreasury.LeagueTreasury__NotMember.selector, leagueId, alice)
+        );
+        vm.prank(alice);
+        leagueTreasury.claim(leagueId);
+    }
+
+    function test_RevertWhen_ClaimingBeforeFinalized() public {
+        uint256 leagueId = _submittedLeague();
+
+        vm.expectRevert(
+            abi.encodeWithSelector(
+                LeagueTreasury.LeagueTreasury__InvalidState.selector,
+                leagueId,
+                LeagueTreasury.LeagueState.FINALIZED,
+                LeagueTreasury.LeagueState.STANDINGS_SUBMITTED
+            )
+        );
+        vm.prank(_member(1));
+        leagueTreasury.claim(leagueId);
+    }
+
+    function test_RevertWhen_ClaimingTwice() public {
+        uint256 leagueId = _finalizedLeague();
+        _claim(_member(1), leagueId);
+
+        vm.expectRevert(
+            abi.encodeWithSelector(
+                LeagueTreasury.LeagueTreasury__AlreadyClaimed.selector,
+                leagueId,
+                _member(1)
+            )
+        );
+        vm.prank(_member(1));
+        leagueTreasury.claim(leagueId);
+    }
+
+    function test_RevertWhen_ClaimingMissingLeague() public {
+        vm.expectRevert(
+            abi.encodeWithSelector(LeagueTreasury.LeagueTreasury__LeagueNotFound.selector, 7)
+        );
+        vm.prank(alice);
+        leagueTreasury.claim(7);
+    }
+
+    /*//////////////////////////////////////////////////////////////
+                    claim: wallets that misbehave
+    //////////////////////////////////////////////////////////////*/
+
+    function test_RevertWhen_WalletRejectsEth() public {
+        RejectingWallet wallet = new RejectingWallet(leagueTreasury);
+        uint256 leagueId = _finalizedLeagueWithContractMember(address(wallet), false, 1);
+        uint256 payout = leagueTreasury.getPayout(leagueId, address(wallet));
+
+        vm.expectRevert(
+            abi.encodeWithSelector(
+                LeagueTreasury.LeagueTreasury__TransferFailed.selector,
+                address(wallet),
+                payout
+            )
+        );
+        wallet.claim(leagueId);
+
+        // the revert undid claimed = true, so the payout is still owed
+        assertFalse(_claimed(leagueId, address(wallet)));
+    }
+
+    function test_RejectingWalletDoesNotBlockOthers() public {
+        RejectingWallet wallet = new RejectingWallet(leagueTreasury);
+        uint256 leagueId = _finalizedLeagueWithContractMember(address(wallet), false, 1);
+
+        // every other member can still claim (pull pattern)
+        for (uint32 i = 1; i < TEAM_COUNT; i++) {
+            assertGt(_claim(_member(i), leagueId), 0);
+        }
+        // only the rejecting wallet's own payout remains
+        assertEq(address(leagueTreasury).balance, leagueTreasury.getPayout(leagueId, address(wallet)));
+    }
+
+    function test_ReentrancyCannotDoubleClaim() public {
+        ReentrantWallet attacker = new ReentrantWallet(leagueTreasury);
+        uint256 leagueId = _finalizedLeagueWithContractMember(address(attacker), true, 1);
+        uint256 payout = leagueTreasury.getPayout(leagueId, address(attacker));
+        uint256 contractBefore = address(leagueTreasury).balance;
+
+        attacker.claim();
+
+        assertTrue(attacker.reentryAttempted());
+        assertFalse(attacker.reentrySucceeded()); // second claim was blocked
+        assertEq(attacker.timesPaid(), 1);
+        assertEq(address(attacker).balance, payout);
+        assertEq(address(leagueTreasury).balance, contractBefore - payout);
+    }
+
+    /*//////////////////////////////////////////////////////////////
+                               fuzz tests
+    //////////////////////////////////////////////////////////////*/
+
+    /// For any buy-in and league size, every member claiming pays out
+    /// exactly the pot and leaves the contract empty.
+    function testFuzz_PayoutsSumExactlyToPot(uint256 buyIn, uint8 teamCount) public {
+        buyIn = bound(buyIn, 1, 1_000 ether);
+        teamCount = uint8(bound(teamCount, 2, 20));
+
+        uint256 leagueId = _runFullLeague(teamCount, buyIn);
+
+        uint256 totalPaid;
+        for (uint32 i = 1; i <= teamCount; i++) {
+            totalPaid += _claim(makeAddr(string.concat("fm", vm.toString(i))), leagueId);
+        }
+        assertEq(totalPaid, buyIn * teamCount);
+        assertEq(address(leagueTreasury).balance, 0);
+    }
+
+    /// Payouts never increase as finishing place gets worse.
+    function testFuzz_BetterPlaceNeverPaysLess(uint256 buyIn) public {
+        buyIn = bound(buyIn, 1, 1_000 ether);
+        uint256 leagueId = _runFullLeague(TEAM_COUNT, buyIn);
+
+        for (uint32 place = 1; place < TEAM_COUNT; place++) {
+            assertGe(
+                leagueTreasury.getPayout(leagueId, makeAddr(string.concat("fm", vm.toString(place)))),
+                leagueTreasury.getPayout(leagueId, makeAddr(string.concat("fm", vm.toString(place + 1))))
+            );
+        }
     }
 }
