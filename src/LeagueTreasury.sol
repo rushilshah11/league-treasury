@@ -2,49 +2,10 @@
 pragma solidity ^0.8.24;
 
 contract LeagueTreasury {
-    enum LeagueState {
-        OPEN,
-        ACTIVE,
-        STANDINGS_SUBMITTED,
-        DISPUTED,
-        FINALIZED,
-        CANCELLED
-    }
+    /*//////////////////////////////////////////////////////////////
+                                 ERRORS
+    //////////////////////////////////////////////////////////////*/
 
-    uint256 public constant TOTAL_BPS = 10000; // 100% in basis points
-
-    // fields ordered to pack into 3 storage slots
-    struct League {
-        address commissioner;
-        uint64 joinDeadline;
-        uint8 teamCount;
-        uint8 memberCount;
-        LeagueState state;
-        address reporter;
-        uint64 standingsDeadline;
-        uint256 buyIn;
-    }
-
-    struct Member {
-        uint32 teamId;
-        bool joined;
-        bool claimed;
-        uint8 finalPlace;
-    }
-
-    uint256 public nextLeagueId;
-    mapping(uint256 => League) public leagues;
-    mapping(uint256 => uint16[]) public payoutBps;
-    mapping(uint256 => mapping(address => Member)) public members;
-    mapping(uint256 => mapping(uint32 => address)) public teamOwners;
-
-    event LeagueCreated(
-        uint256 indexed leagueId,
-        address indexed commissioner,
-        address indexed reporter,
-        uint8 teamCount,
-        uint256 buyIn
-    );
     error LeagueTreasury__InvalidTeamCount(uint8 teamCount);
     error LeagueTreasury__PayoutLengthMismatch(
         uint8 teamCount,
@@ -58,14 +19,119 @@ contract LeagueTreasury {
         uint64 joinDeadline
     );
     error LeagueTreasury__InvalidPayoutTotal(uint256 total);
-
     error LeagueTreasury__LeagueNotFound(uint256 leagueId);
+    error LeagueTreasury__LeagueNotOpen(uint256 leagueId, LeagueState state);
+    error LeagueTreasury__JoinDeadlinePassed(
+        uint256 leagueId,
+        uint64 joinDeadline
+    );
+    error LeagueTreasury__InvalidTeamId(uint32 teamId);
+    error LeagueTreasury__TeamAlreadyTaken(uint256 leagueId, uint32 teamId);
+    error LeagueTreasury__IncorrectBuyIn(uint256 sent, uint256 required);
+    error LeagueTreasury__MemberAlreadyJoined(uint256 leagueId, address member);
+    error LeagueTreasury__InvalidState(
+        uint256 leagueId,
+        LeagueState expected,
+        LeagueState actual
+    );
+    error LeagueTreasury__NotReporter(address caller);
+    error LeagueTreasury__StandingsDeadlinePassed(
+        uint256 leagueId,
+        uint64 deadline
+    );
+    error LeagueTreasury__RankingLengthMismatch(
+        uint8 teamCount,
+        uint256 rankingLength
+    );
+    error LeagueTreasury__DuplicateTeam(uint32 teamId);
+
+    /*//////////////////////////////////////////////////////////////
+                           TYPE DECLARATIONS
+    //////////////////////////////////////////////////////////////*/
+
+    enum LeagueState {
+        OPEN,
+        ACTIVE,
+        STANDINGS_SUBMITTED,
+        DISPUTED,
+        FINALIZED,
+        CANCELLED
+    }
+
+    // fields ordered to pack into 4 storage slots
+    struct League {
+        address commissioner;
+        uint64 joinDeadline;
+        uint8 teamCount;
+        uint8 memberCount;
+        LeagueState state;
+        address reporter;
+        uint64 standingsDeadline;
+        uint256 buyIn;
+        uint64 standingsSubmittedAt;
+    }
+
+    struct Member {
+        uint32 teamId;
+        bool joined;
+        bool claimed;
+        uint8 finalPlace;
+    }
+
+    /*//////////////////////////////////////////////////////////////
+                            STATE VARIABLES
+    //////////////////////////////////////////////////////////////*/
+
+    uint256 public constant TOTAL_BPS = 10000; // 100% in basis points
+    uint256 public constant CHALLENGE_WINDOW = 48 hours;
+
+    uint256 public nextLeagueId;
+    mapping(uint256 => League) public leagues;
+    mapping(uint256 => uint16[]) public payoutBps;
+    mapping(uint256 => mapping(address => Member)) public members;
+    mapping(uint256 => mapping(uint32 => address)) public teamOwners;
+
+    /*//////////////////////////////////////////////////////////////
+                                 EVENTS
+    //////////////////////////////////////////////////////////////*/
+
+    event LeagueCreated(
+        uint256 indexed leagueId,
+        address indexed commissioner,
+        address indexed reporter,
+        uint8 teamCount,
+        uint256 buyIn
+    );
+    event MemberJoined(
+        uint256 indexed leagueId,
+        address indexed member,
+        uint32 indexed teamId
+    );
+    event LeagueActivated(uint256 indexed leagueId);
+    event StandingsSubmitted(uint256 indexed leagueId, uint64 submittedAt);
+
+    /*//////////////////////////////////////////////////////////////
+                               MODIFIERS
+    //////////////////////////////////////////////////////////////*/
+
     modifier leagueExists(uint256 leagueId) {
         if (leagueId >= nextLeagueId) {
             revert LeagueTreasury__LeagueNotFound(leagueId);
         }
         _;
     }
+
+    modifier onlyReporter(uint256 leagueId) {
+        if (msg.sender != leagues[leagueId].reporter) {
+            revert LeagueTreasury__NotReporter(msg.sender);
+        }
+        _;
+    }
+
+    /*//////////////////////////////////////////////////////////////
+                               FUNCTIONS
+    //////////////////////////////////////////////////////////////*/
+
     function createLeague(
         address reporter,
         uint256 buyIn,
@@ -116,28 +182,13 @@ contract LeagueTreasury {
             state: LeagueState.OPEN,
             reporter: reporter,
             standingsDeadline: standingsDeadline,
-            buyIn: buyIn
+            buyIn: buyIn,
+            standingsSubmittedAt: 0
         });
         payoutBps[leagueId] = payout;
 
         emit LeagueCreated(leagueId, msg.sender, reporter, teamCount, buyIn);
     }
-
-    event MemberJoined(
-        uint256 indexed leagueId,
-        address indexed member,
-        uint32 indexed teamId
-    );
-    event LeagueActivated(uint256 indexed leagueId);
-    error LeagueTreasury__LeagueNotOpen(uint256 leagueId, LeagueState state);
-    error LeagueTreasury__JoinDeadlinePassed(
-        uint256 leagueId,
-        uint64 joinDeadline
-    );
-    error LeagueTreasury__InvalidTeamId(uint32 teamId);
-    error LeagueTreasury__TeamAlreadyTaken(uint256 leagueId, uint32 teamId);
-    error LeagueTreasury__IncorrectBuyIn(uint256 sent, uint256 required);
-    error LeagueTreasury__MemberAlreadyJoined(uint256 leagueId, address member);
 
     function joinLeague(
         uint256 leagueId,
@@ -179,6 +230,58 @@ contract LeagueTreasury {
 
         emit MemberJoined(leagueId, msg.sender, teamId);
     }
+
+    function submitStandings(
+        uint256 leagueId,
+        uint32[] calldata rankedTeamIds
+    ) external leagueExists(leagueId) onlyReporter(leagueId) {
+        League storage league = leagues[leagueId];
+        if (league.state != LeagueState.ACTIVE) {
+            revert LeagueTreasury__InvalidState(
+                leagueId,
+                LeagueState.ACTIVE,
+                league.state
+            );
+        }
+
+        if (block.timestamp >= league.standingsDeadline) {
+            revert LeagueTreasury__StandingsDeadlinePassed(
+                leagueId,
+                league.standingsDeadline
+            );
+        }
+
+        if (rankedTeamIds.length != league.teamCount) {
+            revert LeagueTreasury__RankingLengthMismatch(
+                league.teamCount,
+                rankedTeamIds.length
+            );
+        }
+
+        for (uint32 i = 0; i < rankedTeamIds.length; i++) {
+            uint32 teamId = rankedTeamIds[i];
+            address owner = teamOwners[leagueId][teamId];
+            if (teamId == 0 || owner == address(0)) {
+                revert LeagueTreasury__InvalidTeamId(teamId);
+            }
+
+            Member storage member = members[leagueId][owner];
+            if (member.finalPlace != 0) {
+                revert LeagueTreasury__DuplicateTeam(teamId);
+            }
+            member.finalPlace = uint8(i + 1);
+        }
+
+        uint64 submittedAt = uint64(block.timestamp);
+        league.state = LeagueState.STANDINGS_SUBMITTED;
+        league.standingsSubmittedAt = submittedAt;
+
+        emit StandingsSubmitted(leagueId, submittedAt);
+    }
+
+    /*//////////////////////////////////////////////////////////////
+                             VIEW FUNCTIONS
+    //////////////////////////////////////////////////////////////*/
 
     function getPayoutBps(
         uint256 leagueId

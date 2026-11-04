@@ -63,16 +63,46 @@ contract LeagueTreasuryTest is Test {
         }
     }
 
+    /// Ranking where team i finishes in place i (team 1 wins, team 14 is last).
+    function _ranking() internal pure returns (uint32[] memory ranking) {
+        ranking = new uint32[](TEAM_COUNT);
+        for (uint32 i = 0; i < TEAM_COUNT; i++) {
+            ranking[i] = i + 1;
+        }
+    }
+
+    /// Creates a league and fills it, so it's ACTIVE and ready for standings.
+    function _activeLeague() internal returns (uint256 leagueId) {
+        leagueId = _createLeague();
+        _fillLeague(leagueId);
+    }
+
+    function _submit(uint256 leagueId, uint32[] memory ranking) internal {
+        vm.prank(reporter);
+        leagueTreasury.submitStandings(leagueId, ranking);
+    }
+
+    function _member(uint32 teamId) internal returns (address) {
+        return makeAddr(string.concat("member", vm.toString(teamId)));
+    }
+
+    function _finalPlace(
+        uint256 leagueId,
+        address who
+    ) internal view returns (uint8 finalPlace) {
+        (, , , finalPlace) = leagueTreasury.members(leagueId, who);
+    }
+
     function _state(
         uint256 leagueId
     ) internal view returns (LeagueTreasury.LeagueState state) {
-        (, , , , state, , , ) = leagueTreasury.leagues(leagueId);
+        (, , , , state, , , , ) = leagueTreasury.leagues(leagueId);
     }
 
     function _memberCount(
         uint256 leagueId
     ) internal view returns (uint8 memberCount) {
-        (, , , memberCount, , , , ) = leagueTreasury.leagues(leagueId);
+        (, , , memberCount, , , , , ) = leagueTreasury.leagues(leagueId);
     }
 
     function setUp() public {
@@ -104,7 +134,8 @@ contract LeagueTreasuryTest is Test {
             LeagueTreasury.LeagueState state,
             address r,
             uint64 standingsDeadline,
-            uint256 buyIn
+            uint256 buyIn,
+            uint64 standingsSubmittedAt
         ) = leagueTreasury.leagues(leagueId);
 
         assertEq(c, commissioner);
@@ -115,6 +146,7 @@ contract LeagueTreasuryTest is Test {
         assertEq(r, reporter);
         assertEq(standingsDeadline, uint64(block.timestamp + 2 days));
         assertEq(buyIn, BUY_IN);
+        assertEq(standingsSubmittedAt, 0);
     }
 
     function test_CreateLeague_EmitsEvent() public {
@@ -256,9 +288,7 @@ contract LeagueTreasuryTest is Test {
 
         vm.expectRevert(
             abi.encodeWithSelector(
-                LeagueTreasury
-                    .LeagueTreasury__InvalidStandingsDeadline
-                    .selector,
+                LeagueTreasury.LeagueTreasury__InvalidStandingsDeadline.selector,
                 standingsDeadline,
                 joinDeadline
             )
@@ -280,9 +310,7 @@ contract LeagueTreasuryTest is Test {
 
         vm.expectRevert(
             abi.encodeWithSelector(
-                LeagueTreasury
-                    .LeagueTreasury__InvalidStandingsDeadline
-                    .selector,
+                LeagueTreasury.LeagueTreasury__InvalidStandingsDeadline.selector,
                 deadline,
                 deadline
             )
@@ -350,12 +378,8 @@ contract LeagueTreasuryTest is Test {
         uint256 leagueId = _createLeague();
         _join(alice, leagueId, 1);
 
-        (
-            uint32 teamId,
-            bool joined,
-            bool claimed,
-            uint8 finalPlace
-        ) = leagueTreasury.members(leagueId, alice);
+        (uint32 teamId, bool joined, bool claimed, uint8 finalPlace) = leagueTreasury
+            .members(leagueId, alice);
 
         assertEq(teamId, 1);
         assertTrue(joined);
@@ -534,5 +558,199 @@ contract LeagueTreasuryTest is Test {
             )
         );
         _join(alice, leagueId, 2);
+    }
+
+    /*//////////////////////////////////////////////////////////////
+                        submitStandings: happy path
+    //////////////////////////////////////////////////////////////*/
+
+    function test_SubmitStandings_SetsFinalPlaces() public {
+        uint256 leagueId = _activeLeague();
+        _submit(leagueId, _ranking());
+
+        for (uint32 teamId = 1; teamId <= TEAM_COUNT; teamId++) {
+            assertEq(_finalPlace(leagueId, _member(teamId)), teamId);
+        }
+    }
+
+    function test_SubmitStandings_ReversedRanking() public {
+        uint256 leagueId = _activeLeague();
+        uint32[] memory ranking = new uint32[](TEAM_COUNT);
+        for (uint32 i = 0; i < TEAM_COUNT; i++) {
+            ranking[i] = TEAM_COUNT - i; // team 14 wins, team 1 is last
+        }
+        _submit(leagueId, ranking);
+
+        assertEq(_finalPlace(leagueId, _member(TEAM_COUNT)), 1);
+        assertEq(_finalPlace(leagueId, _member(1)), TEAM_COUNT);
+    }
+
+    function test_SubmitStandings_UpdatesStateAndTimestamp() public {
+        uint256 leagueId = _activeLeague();
+        _submit(leagueId, _ranking());
+
+        (, , , , LeagueTreasury.LeagueState state, , , , uint64 submittedAt) = leagueTreasury
+            .leagues(leagueId);
+        assertEq(
+            uint8(state),
+            uint8(LeagueTreasury.LeagueState.STANDINGS_SUBMITTED)
+        );
+        assertEq(submittedAt, uint64(block.timestamp));
+    }
+
+    function test_SubmitStandings_EmitsEvent() public {
+        uint256 leagueId = _activeLeague();
+
+        vm.expectEmit(true, true, true, true);
+        emit LeagueTreasury.StandingsSubmitted(leagueId, uint64(block.timestamp));
+        _submit(leagueId, _ranking());
+    }
+
+    function test_SubmitStandings_JustBeforeDeadline() public {
+        uint256 leagueId = _activeLeague();
+        vm.warp(block.timestamp + 2 days - 1); // one second before the standings deadline
+        _submit(leagueId, _ranking());
+
+        assertEq(
+            uint8(_state(leagueId)),
+            uint8(LeagueTreasury.LeagueState.STANDINGS_SUBMITTED)
+        );
+    }
+
+    /*//////////////////////////////////////////////////////////////
+                          submitStandings: reverts
+    //////////////////////////////////////////////////////////////*/
+
+    function test_RevertWhen_NonReporterSubmits() public {
+        uint256 leagueId = _activeLeague();
+        uint32[] memory ranking = _ranking();
+
+        vm.expectRevert(
+            abi.encodeWithSelector(
+                LeagueTreasury.LeagueTreasury__NotReporter.selector,
+                alice
+            )
+        );
+        vm.prank(alice);
+        leagueTreasury.submitStandings(leagueId, ranking);
+    }
+
+    function test_RevertWhen_SubmittingForMissingLeague() public {
+        uint32[] memory ranking = _ranking();
+
+        vm.expectRevert(
+            abi.encodeWithSelector(
+                LeagueTreasury.LeagueTreasury__LeagueNotFound.selector,
+                0
+            )
+        );
+        _submit(0, ranking);
+    }
+
+    function test_RevertWhen_SubmittingBeforeLeagueIsFull() public {
+        uint256 leagueId = _createLeague();
+        _join(alice, leagueId, 1);
+        uint32[] memory ranking = _ranking();
+
+        vm.expectRevert(
+            abi.encodeWithSelector(
+                LeagueTreasury.LeagueTreasury__InvalidState.selector,
+                leagueId,
+                LeagueTreasury.LeagueState.ACTIVE,
+                LeagueTreasury.LeagueState.OPEN
+            )
+        );
+        _submit(leagueId, ranking);
+    }
+
+    function test_RevertWhen_SubmittingTwice() public {
+        uint256 leagueId = _activeLeague();
+        _submit(leagueId, _ranking());
+        uint32[] memory ranking = _ranking();
+
+        vm.expectRevert(
+            abi.encodeWithSelector(
+                LeagueTreasury.LeagueTreasury__InvalidState.selector,
+                leagueId,
+                LeagueTreasury.LeagueState.ACTIVE,
+                LeagueTreasury.LeagueState.STANDINGS_SUBMITTED
+            )
+        );
+        _submit(leagueId, ranking);
+    }
+
+    function test_RevertWhen_SubmittingAtStandingsDeadline() public {
+        uint256 leagueId = _activeLeague();
+        uint64 standingsDeadline = uint64(block.timestamp + 2 days);
+        vm.warp(standingsDeadline);
+        uint32[] memory ranking = _ranking();
+
+        vm.expectRevert(
+            abi.encodeWithSelector(
+                LeagueTreasury.LeagueTreasury__StandingsDeadlinePassed.selector,
+                leagueId,
+                standingsDeadline
+            )
+        );
+        _submit(leagueId, ranking);
+    }
+
+    function test_RevertWhen_RankingTooShort() public {
+        uint256 leagueId = _activeLeague();
+        uint32[] memory ranking = new uint32[](TEAM_COUNT - 1);
+        for (uint32 i = 0; i < TEAM_COUNT - 1; i++) {
+            ranking[i] = i + 1;
+        }
+
+        vm.expectRevert(
+            abi.encodeWithSelector(
+                LeagueTreasury.LeagueTreasury__RankingLengthMismatch.selector,
+                TEAM_COUNT,
+                TEAM_COUNT - 1
+            )
+        );
+        _submit(leagueId, ranking);
+    }
+
+    function test_RevertWhen_RankingHasUnknownTeam() public {
+        uint256 leagueId = _activeLeague();
+        uint32[] memory ranking = _ranking();
+        ranking[5] = 99; // no one registered team 99
+
+        vm.expectRevert(
+            abi.encodeWithSelector(
+                LeagueTreasury.LeagueTreasury__InvalidTeamId.selector,
+                99
+            )
+        );
+        _submit(leagueId, ranking);
+    }
+
+    function test_RevertWhen_RankingHasTeamZero() public {
+        uint256 leagueId = _activeLeague();
+        uint32[] memory ranking = _ranking();
+        ranking[0] = 0;
+
+        vm.expectRevert(
+            abi.encodeWithSelector(
+                LeagueTreasury.LeagueTreasury__InvalidTeamId.selector,
+                0
+            )
+        );
+        _submit(leagueId, ranking);
+    }
+
+    function test_RevertWhen_RankingHasDuplicateTeam() public {
+        uint256 leagueId = _activeLeague();
+        uint32[] memory ranking = _ranking();
+        ranking[1] = 1; // team 1 listed 1st and 2nd; team 2 is missing
+
+        vm.expectRevert(
+            abi.encodeWithSelector(
+                LeagueTreasury.LeagueTreasury__DuplicateTeam.selector,
+                1
+            )
+        );
+        _submit(leagueId, ranking);
     }
 }
