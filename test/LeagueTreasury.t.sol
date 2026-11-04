@@ -20,9 +20,7 @@ contract LeagueTreasuryTest is Test {
                                 HELPERS
     //////////////////////////////////////////////////////////////*/
 
-    function _linearPayout(
-        uint8 teamCount
-    ) internal pure returns (uint16[] memory) {
+    function _linearPayout(uint8 teamCount) internal pure returns (uint16[] memory) {
         uint256 n = teamCount;
         uint256 weightSum = (n * (n + 1)) / 2; // sum of 1..n
 
@@ -41,12 +39,7 @@ contract LeagueTreasuryTest is Test {
         uint16[] memory payout = _linearPayout(TEAM_COUNT);
         vm.prank(commissioner);
         leagueId = leagueTreasury.createLeague(
-            reporter,
-            BUY_IN,
-            TEAM_COUNT,
-            uint64(block.timestamp + 1 days),
-            uint64(block.timestamp + 2 days),
-            payout
+            reporter, BUY_IN, TEAM_COUNT, uint64(block.timestamp + 1 days), uint64(block.timestamp + 2 days), payout
         );
     }
 
@@ -87,11 +80,8 @@ contract LeagueTreasuryTest is Test {
         return makeAddr(string.concat("member", vm.toString(teamId)));
     }
 
-    function _finalPlace(
-        uint256 leagueId,
-        address who
-    ) internal view returns (uint8 finalPlace) {
-        (, , , finalPlace) = leagueTreasury.members(leagueId, who);
+    function _finalPlace(uint256 leagueId, address who) internal view returns (uint8 finalPlace) {
+        (,,, finalPlace) = leagueTreasury.members(leagueId, who);
     }
 
     /// Active league with standings submitted (team i in place i). Window is open.
@@ -116,7 +106,7 @@ contract LeagueTreasuryTest is Test {
     }
 
     function _disputedAt(uint256 leagueId) internal view returns (uint64 disputedAt) {
-        (, , , , , , , , , disputedAt) = leagueTreasury.leagues(leagueId);
+        (,,,,,,,,, disputedAt) = leagueTreasury.leagues(leagueId);
     }
 
     /// Submitted league with the challenge window passed and finalize() called.
@@ -193,19 +183,22 @@ contract LeagueTreasuryTest is Test {
     }
 
     function _claimed(uint256 leagueId, address who) internal view returns (bool claimed) {
-        (, , claimed, ) = leagueTreasury.members(leagueId, who);
+        (,, claimed,) = leagueTreasury.members(leagueId, who);
     }
 
-    function _state(
-        uint256 leagueId
-    ) internal view returns (LeagueTreasury.LeagueState state) {
-        (, , , , state, , , , , ) = leagueTreasury.leagues(leagueId);
+    function _refund(address who, uint256 leagueId) internal returns (uint256 received) {
+        uint256 before = who.balance;
+        vm.prank(who);
+        leagueTreasury.withdrawRefund(leagueId);
+        received = who.balance - before;
     }
 
-    function _memberCount(
-        uint256 leagueId
-    ) internal view returns (uint8 memberCount) {
-        (, , , memberCount, , , , , , ) = leagueTreasury.leagues(leagueId);
+    function _state(uint256 leagueId) internal view returns (LeagueTreasury.LeagueState state) {
+        (,,,, state,,,,,) = leagueTreasury.leagues(leagueId);
+    }
+
+    function _memberCount(uint256 leagueId) internal view returns (uint8 memberCount) {
+        (,,, memberCount,,,,,,) = leagueTreasury.leagues(leagueId);
     }
 
     function setUp() public {
@@ -254,13 +247,7 @@ contract LeagueTreasuryTest is Test {
 
     function test_CreateLeague_EmitsEvent() public {
         vm.expectEmit(true, true, true, true);
-        emit LeagueTreasury.LeagueCreated(
-            0,
-            commissioner,
-            reporter,
-            TEAM_COUNT,
-            BUY_IN
-        );
+        emit LeagueTreasury.LeagueCreated(0, commissioner, reporter, TEAM_COUNT, BUY_IN);
         _createLeague();
     }
 
@@ -285,20 +272,10 @@ contract LeagueTreasuryTest is Test {
     function test_RevertWhen_TeamCountBelowTwo() public {
         uint16[] memory payout = _linearPayout(1);
 
-        vm.expectRevert(
-            abi.encodeWithSelector(
-                LeagueTreasury.LeagueTreasury__InvalidTeamCount.selector,
-                1
-            )
-        );
+        vm.expectRevert(abi.encodeWithSelector(LeagueTreasury.LeagueTreasury__InvalidTeamCount.selector, 1));
         vm.prank(commissioner);
         leagueTreasury.createLeague(
-            reporter,
-            BUY_IN,
-            1,
-            uint64(block.timestamp + 1 days),
-            uint64(block.timestamp + 2 days),
-            payout
+            reporter, BUY_IN, 1, uint64(block.timestamp + 1 days), uint64(block.timestamp + 2 days), payout
         );
     }
 
@@ -307,59 +284,32 @@ contract LeagueTreasuryTest is Test {
 
         vm.expectRevert(
             abi.encodeWithSelector(
-                LeagueTreasury.LeagueTreasury__PayoutLengthMismatch.selector,
-                TEAM_COUNT,
-                TEAM_COUNT - 1
+                LeagueTreasury.LeagueTreasury__PayoutLengthMismatch.selector, TEAM_COUNT, TEAM_COUNT - 1
             )
         );
         vm.prank(commissioner);
         leagueTreasury.createLeague(
-            reporter,
-            BUY_IN,
-            TEAM_COUNT,
-            uint64(block.timestamp + 1 days),
-            uint64(block.timestamp + 2 days),
-            payout
+            reporter, BUY_IN, TEAM_COUNT, uint64(block.timestamp + 1 days), uint64(block.timestamp + 2 days), payout
         );
     }
 
     function test_RevertWhen_BuyInIsZero() public {
         uint16[] memory payout = _linearPayout(TEAM_COUNT);
 
-        vm.expectRevert(
-            abi.encodeWithSelector(
-                LeagueTreasury.LeagueTreasury__InvalidBuyIn.selector,
-                0
-            )
-        );
+        vm.expectRevert(abi.encodeWithSelector(LeagueTreasury.LeagueTreasury__InvalidBuyIn.selector, 0));
         vm.prank(commissioner);
         leagueTreasury.createLeague(
-            reporter,
-            0,
-            TEAM_COUNT,
-            uint64(block.timestamp + 1 days),
-            uint64(block.timestamp + 2 days),
-            payout
+            reporter, 0, TEAM_COUNT, uint64(block.timestamp + 1 days), uint64(block.timestamp + 2 days), payout
         );
     }
 
     function test_RevertWhen_ReporterIsZeroAddress() public {
         uint16[] memory payout = _linearPayout(TEAM_COUNT);
 
-        vm.expectRevert(
-            abi.encodeWithSelector(
-                LeagueTreasury.LeagueTreasury__InvalidReporter.selector,
-                address(0)
-            )
-        );
+        vm.expectRevert(abi.encodeWithSelector(LeagueTreasury.LeagueTreasury__InvalidReporter.selector, address(0)));
         vm.prank(commissioner);
         leagueTreasury.createLeague(
-            address(0),
-            BUY_IN,
-            TEAM_COUNT,
-            uint64(block.timestamp + 1 days),
-            uint64(block.timestamp + 2 days),
-            payout
+            address(0), BUY_IN, TEAM_COUNT, uint64(block.timestamp + 1 days), uint64(block.timestamp + 2 days), payout
         );
     }
 
@@ -368,19 +318,11 @@ contract LeagueTreasuryTest is Test {
         uint64 joinDeadline = uint64(block.timestamp); // exactly "now" is not allowed
 
         vm.expectRevert(
-            abi.encodeWithSelector(
-                LeagueTreasury.LeagueTreasury__InvalidJoinDeadline.selector,
-                joinDeadline
-            )
+            abi.encodeWithSelector(LeagueTreasury.LeagueTreasury__InvalidJoinDeadline.selector, joinDeadline)
         );
         vm.prank(commissioner);
         leagueTreasury.createLeague(
-            reporter,
-            BUY_IN,
-            TEAM_COUNT,
-            joinDeadline,
-            uint64(block.timestamp + 2 days),
-            payout
+            reporter, BUY_IN, TEAM_COUNT, joinDeadline, uint64(block.timestamp + 2 days), payout
         );
     }
 
@@ -391,20 +333,11 @@ contract LeagueTreasuryTest is Test {
 
         vm.expectRevert(
             abi.encodeWithSelector(
-                LeagueTreasury.LeagueTreasury__InvalidStandingsDeadline.selector,
-                standingsDeadline,
-                joinDeadline
+                LeagueTreasury.LeagueTreasury__InvalidStandingsDeadline.selector, standingsDeadline, joinDeadline
             )
         );
         vm.prank(commissioner);
-        leagueTreasury.createLeague(
-            reporter,
-            BUY_IN,
-            TEAM_COUNT,
-            joinDeadline,
-            standingsDeadline,
-            payout
-        );
+        leagueTreasury.createLeague(reporter, BUY_IN, TEAM_COUNT, joinDeadline, standingsDeadline, payout);
     }
 
     function test_RevertWhen_StandingsDeadlineEqualsJoinDeadline() public {
@@ -412,21 +345,10 @@ contract LeagueTreasuryTest is Test {
         uint64 deadline = uint64(block.timestamp + 1 days);
 
         vm.expectRevert(
-            abi.encodeWithSelector(
-                LeagueTreasury.LeagueTreasury__InvalidStandingsDeadline.selector,
-                deadline,
-                deadline
-            )
+            abi.encodeWithSelector(LeagueTreasury.LeagueTreasury__InvalidStandingsDeadline.selector, deadline, deadline)
         );
         vm.prank(commissioner);
-        leagueTreasury.createLeague(
-            reporter,
-            BUY_IN,
-            TEAM_COUNT,
-            deadline,
-            deadline,
-            payout
-        );
+        leagueTreasury.createLeague(reporter, BUY_IN, TEAM_COUNT, deadline, deadline, payout);
     }
 
     function test_RevertWhen_PayoutTotalWrong() public {
@@ -435,20 +357,10 @@ contract LeagueTreasuryTest is Test {
             payout[i] = 1; // sums to 14, not 10000
         }
 
-        vm.expectRevert(
-            abi.encodeWithSelector(
-                LeagueTreasury.LeagueTreasury__InvalidPayoutTotal.selector,
-                TEAM_COUNT
-            )
-        );
+        vm.expectRevert(abi.encodeWithSelector(LeagueTreasury.LeagueTreasury__InvalidPayoutTotal.selector, TEAM_COUNT));
         vm.prank(commissioner);
         leagueTreasury.createLeague(
-            reporter,
-            BUY_IN,
-            TEAM_COUNT,
-            uint64(block.timestamp + 1 days),
-            uint64(block.timestamp + 2 days),
-            payout
+            reporter, BUY_IN, TEAM_COUNT, uint64(block.timestamp + 1 days), uint64(block.timestamp + 2 days), payout
         );
     }
 
@@ -456,20 +368,10 @@ contract LeagueTreasuryTest is Test {
         uint16[] memory payout = _linearPayout(TEAM_COUNT); // sums to 10000
         payout[TEAM_COUNT - 1] -= 1; // now sums to 9999
 
-        vm.expectRevert(
-            abi.encodeWithSelector(
-                LeagueTreasury.LeagueTreasury__InvalidPayoutTotal.selector,
-                9999
-            )
-        );
+        vm.expectRevert(abi.encodeWithSelector(LeagueTreasury.LeagueTreasury__InvalidPayoutTotal.selector, 9999));
         vm.prank(commissioner);
         leagueTreasury.createLeague(
-            reporter,
-            BUY_IN,
-            TEAM_COUNT,
-            uint64(block.timestamp + 1 days),
-            uint64(block.timestamp + 2 days),
-            payout
+            reporter, BUY_IN, TEAM_COUNT, uint64(block.timestamp + 1 days), uint64(block.timestamp + 2 days), payout
         );
     }
 
@@ -481,8 +383,7 @@ contract LeagueTreasuryTest is Test {
         uint256 leagueId = _createLeague();
         _join(alice, leagueId, 1);
 
-        (uint32 teamId, bool joined, bool claimed, uint8 finalPlace) = leagueTreasury
-            .members(leagueId, alice);
+        (uint32 teamId, bool joined, bool claimed, uint8 finalPlace) = leagueTreasury.members(leagueId, alice);
 
         assertEq(teamId, 1);
         assertTrue(joined);
@@ -511,10 +412,7 @@ contract LeagueTreasuryTest is Test {
         _join(bob, leagueId, 2);
 
         assertEq(_memberCount(leagueId), 2);
-        assertEq(
-            uint8(_state(leagueId)),
-            uint8(LeagueTreasury.LeagueState.OPEN)
-        );
+        assertEq(uint8(_state(leagueId)), uint8(LeagueTreasury.LeagueState.OPEN));
     }
 
     function test_JoinLeague_ActivatesWhenFull() public {
@@ -522,10 +420,7 @@ contract LeagueTreasuryTest is Test {
         _fillLeague(leagueId);
 
         assertEq(_memberCount(leagueId), TEAM_COUNT);
-        assertEq(
-            uint8(_state(leagueId)),
-            uint8(LeagueTreasury.LeagueState.ACTIVE)
-        );
+        assertEq(uint8(_state(leagueId)), uint8(LeagueTreasury.LeagueState.ACTIVE));
         assertEq(address(leagueTreasury).balance, BUY_IN * TEAM_COUNT);
     }
 
@@ -557,12 +452,7 @@ contract LeagueTreasuryTest is Test {
     //////////////////////////////////////////////////////////////*/
 
     function test_RevertWhen_JoiningLeagueThatDoesNotExist() public {
-        vm.expectRevert(
-            abi.encodeWithSelector(
-                LeagueTreasury.LeagueTreasury__LeagueNotFound.selector,
-                0
-            )
-        );
+        vm.expectRevert(abi.encodeWithSelector(LeagueTreasury.LeagueTreasury__LeagueNotFound.selector, 0));
         _join(alice, 0, 1);
     }
 
@@ -572,9 +462,7 @@ contract LeagueTreasuryTest is Test {
 
         vm.expectRevert(
             abi.encodeWithSelector(
-                LeagueTreasury.LeagueTreasury__LeagueNotOpen.selector,
-                leagueId,
-                LeagueTreasury.LeagueState.ACTIVE
+                LeagueTreasury.LeagueTreasury__LeagueNotOpen.selector, leagueId, LeagueTreasury.LeagueState.ACTIVE
             )
         );
         _join(alice, leagueId, 99);
@@ -586,11 +474,7 @@ contract LeagueTreasuryTest is Test {
         vm.warp(joinDeadline); // exactly at the deadline, joining is closed
 
         vm.expectRevert(
-            abi.encodeWithSelector(
-                LeagueTreasury.LeagueTreasury__JoinDeadlinePassed.selector,
-                leagueId,
-                joinDeadline
-            )
+            abi.encodeWithSelector(LeagueTreasury.LeagueTreasury__JoinDeadlinePassed.selector, leagueId, joinDeadline)
         );
         _join(alice, leagueId, 1);
     }
@@ -598,12 +482,7 @@ contract LeagueTreasuryTest is Test {
     function test_RevertWhen_TeamIdIsZero() public {
         uint256 leagueId = _createLeague();
 
-        vm.expectRevert(
-            abi.encodeWithSelector(
-                LeagueTreasury.LeagueTreasury__InvalidTeamId.selector,
-                0
-            )
-        );
+        vm.expectRevert(abi.encodeWithSelector(LeagueTreasury.LeagueTreasury__InvalidTeamId.selector, 0));
         _join(alice, leagueId, 0);
     }
 
@@ -611,13 +490,7 @@ contract LeagueTreasuryTest is Test {
         uint256 leagueId = _createLeague();
         _join(alice, leagueId, 1);
 
-        vm.expectRevert(
-            abi.encodeWithSelector(
-                LeagueTreasury.LeagueTreasury__TeamAlreadyTaken.selector,
-                leagueId,
-                1
-            )
-        );
+        vm.expectRevert(abi.encodeWithSelector(LeagueTreasury.LeagueTreasury__TeamAlreadyTaken.selector, leagueId, 1));
         _join(bob, leagueId, 1);
     }
 
@@ -625,11 +498,7 @@ contract LeagueTreasuryTest is Test {
         uint256 leagueId = _createLeague();
 
         vm.expectRevert(
-            abi.encodeWithSelector(
-                LeagueTreasury.LeagueTreasury__IncorrectBuyIn.selector,
-                BUY_IN - 1,
-                BUY_IN
-            )
+            abi.encodeWithSelector(LeagueTreasury.LeagueTreasury__IncorrectBuyIn.selector, BUY_IN - 1, BUY_IN)
         );
         vm.prank(alice);
         leagueTreasury.joinLeague{value: BUY_IN - 1}(leagueId, 1);
@@ -639,11 +508,7 @@ contract LeagueTreasuryTest is Test {
         uint256 leagueId = _createLeague();
 
         vm.expectRevert(
-            abi.encodeWithSelector(
-                LeagueTreasury.LeagueTreasury__IncorrectBuyIn.selector,
-                BUY_IN + 1,
-                BUY_IN
-            )
+            abi.encodeWithSelector(LeagueTreasury.LeagueTreasury__IncorrectBuyIn.selector, BUY_IN + 1, BUY_IN)
         );
         vm.prank(alice);
         leagueTreasury.joinLeague{value: BUY_IN + 1}(leagueId, 1);
@@ -654,11 +519,7 @@ contract LeagueTreasuryTest is Test {
         _join(alice, leagueId, 1);
 
         vm.expectRevert(
-            abi.encodeWithSelector(
-                LeagueTreasury.LeagueTreasury__MemberAlreadyJoined.selector,
-                leagueId,
-                alice
-            )
+            abi.encodeWithSelector(LeagueTreasury.LeagueTreasury__MemberAlreadyJoined.selector, leagueId, alice)
         );
         _join(alice, leagueId, 2);
     }
@@ -692,12 +553,8 @@ contract LeagueTreasuryTest is Test {
         uint256 leagueId = _activeLeague();
         _submit(leagueId, _ranking());
 
-        (, , , , LeagueTreasury.LeagueState state, , , , uint64 submittedAt, ) = leagueTreasury
-            .leagues(leagueId);
-        assertEq(
-            uint8(state),
-            uint8(LeagueTreasury.LeagueState.STANDINGS_SUBMITTED)
-        );
+        (,,,, LeagueTreasury.LeagueState state,,,, uint64 submittedAt,) = leagueTreasury.leagues(leagueId);
+        assertEq(uint8(state), uint8(LeagueTreasury.LeagueState.STANDINGS_SUBMITTED));
         assertEq(submittedAt, uint64(block.timestamp));
     }
 
@@ -714,10 +571,7 @@ contract LeagueTreasuryTest is Test {
         vm.warp(block.timestamp + 2 days - 1); // one second before the standings deadline
         _submit(leagueId, _ranking());
 
-        assertEq(
-            uint8(_state(leagueId)),
-            uint8(LeagueTreasury.LeagueState.STANDINGS_SUBMITTED)
-        );
+        assertEq(uint8(_state(leagueId)), uint8(LeagueTreasury.LeagueState.STANDINGS_SUBMITTED));
     }
 
     /*//////////////////////////////////////////////////////////////
@@ -728,12 +582,7 @@ contract LeagueTreasuryTest is Test {
         uint256 leagueId = _activeLeague();
         uint32[] memory ranking = _ranking();
 
-        vm.expectRevert(
-            abi.encodeWithSelector(
-                LeagueTreasury.LeagueTreasury__NotReporter.selector,
-                alice
-            )
-        );
+        vm.expectRevert(abi.encodeWithSelector(LeagueTreasury.LeagueTreasury__NotReporter.selector, alice));
         vm.prank(alice);
         leagueTreasury.submitStandings(leagueId, ranking);
     }
@@ -741,12 +590,7 @@ contract LeagueTreasuryTest is Test {
     function test_RevertWhen_SubmittingForMissingLeague() public {
         uint32[] memory ranking = _ranking();
 
-        vm.expectRevert(
-            abi.encodeWithSelector(
-                LeagueTreasury.LeagueTreasury__LeagueNotFound.selector,
-                0
-            )
-        );
+        vm.expectRevert(abi.encodeWithSelector(LeagueTreasury.LeagueTreasury__LeagueNotFound.selector, 0));
         _submit(0, ranking);
     }
 
@@ -790,9 +634,7 @@ contract LeagueTreasuryTest is Test {
 
         vm.expectRevert(
             abi.encodeWithSelector(
-                LeagueTreasury.LeagueTreasury__StandingsDeadlinePassed.selector,
-                leagueId,
-                standingsDeadline
+                LeagueTreasury.LeagueTreasury__StandingsDeadlinePassed.selector, leagueId, standingsDeadline
             )
         );
         _submit(leagueId, ranking);
@@ -807,9 +649,7 @@ contract LeagueTreasuryTest is Test {
 
         vm.expectRevert(
             abi.encodeWithSelector(
-                LeagueTreasury.LeagueTreasury__RankingLengthMismatch.selector,
-                TEAM_COUNT,
-                TEAM_COUNT - 1
+                LeagueTreasury.LeagueTreasury__RankingLengthMismatch.selector, TEAM_COUNT, TEAM_COUNT - 1
             )
         );
         _submit(leagueId, ranking);
@@ -820,12 +660,7 @@ contract LeagueTreasuryTest is Test {
         uint32[] memory ranking = _ranking();
         ranking[5] = 99; // no one registered team 99
 
-        vm.expectRevert(
-            abi.encodeWithSelector(
-                LeagueTreasury.LeagueTreasury__InvalidTeamId.selector,
-                99
-            )
-        );
+        vm.expectRevert(abi.encodeWithSelector(LeagueTreasury.LeagueTreasury__InvalidTeamId.selector, 99));
         _submit(leagueId, ranking);
     }
 
@@ -834,12 +669,7 @@ contract LeagueTreasuryTest is Test {
         uint32[] memory ranking = _ranking();
         ranking[0] = 0;
 
-        vm.expectRevert(
-            abi.encodeWithSelector(
-                LeagueTreasury.LeagueTreasury__InvalidTeamId.selector,
-                0
-            )
-        );
+        vm.expectRevert(abi.encodeWithSelector(LeagueTreasury.LeagueTreasury__InvalidTeamId.selector, 0));
         _submit(leagueId, ranking);
     }
 
@@ -848,12 +678,7 @@ contract LeagueTreasuryTest is Test {
         uint32[] memory ranking = _ranking();
         ranking[1] = 1; // team 1 listed 1st and 2nd; team 2 is missing
 
-        vm.expectRevert(
-            abi.encodeWithSelector(
-                LeagueTreasury.LeagueTreasury__DuplicateTeam.selector,
-                1
-            )
-        );
+        vm.expectRevert(abi.encodeWithSelector(LeagueTreasury.LeagueTreasury__DuplicateTeam.selector, 1));
         _submit(leagueId, ranking);
     }
 
@@ -895,9 +720,7 @@ contract LeagueTreasuryTest is Test {
     function test_RevertWhen_NonMemberDisputes() public {
         uint256 leagueId = _submittedLeague();
 
-        vm.expectRevert(
-            abi.encodeWithSelector(LeagueTreasury.LeagueTreasury__NotMember.selector, leagueId, alice)
-        );
+        vm.expectRevert(abi.encodeWithSelector(LeagueTreasury.LeagueTreasury__NotMember.selector, leagueId, alice));
         vm.prank(alice); // alice never joined this league
         leagueTreasury.dispute(leagueId);
     }
@@ -938,11 +761,7 @@ contract LeagueTreasuryTest is Test {
         vm.warp(windowEnd);
 
         vm.expectRevert(
-            abi.encodeWithSelector(
-                LeagueTreasury.LeagueTreasury__ChallengeWindowClosed.selector,
-                leagueId,
-                windowEnd
-            )
+            abi.encodeWithSelector(LeagueTreasury.LeagueTreasury__ChallengeWindowClosed.selector, leagueId, windowEnd)
         );
         vm.prank(_member(1));
         leagueTreasury.dispute(leagueId);
@@ -986,11 +805,7 @@ contract LeagueTreasuryTest is Test {
         vm.warp(windowEnd - 1);
 
         vm.expectRevert(
-            abi.encodeWithSelector(
-                LeagueTreasury.LeagueTreasury__ChallengeWindowOpen.selector,
-                leagueId,
-                windowEnd
-            )
+            abi.encodeWithSelector(LeagueTreasury.LeagueTreasury__ChallengeWindowOpen.selector, leagueId, windowEnd)
         );
         leagueTreasury.finalize(leagueId);
     }
@@ -1083,9 +898,7 @@ contract LeagueTreasuryTest is Test {
         uint256 leagueId = _disputedLeague();
         uint32[] memory corrected = _reversedRanking();
 
-        vm.expectRevert(
-            abi.encodeWithSelector(LeagueTreasury.LeagueTreasury__NotCommissioner.selector, reporter)
-        );
+        vm.expectRevert(abi.encodeWithSelector(LeagueTreasury.LeagueTreasury__NotCommissioner.selector, reporter));
         vm.prank(reporter); // even the reporter can't resolve disputes
         leagueTreasury.resolveDispute(leagueId, corrected);
     }
@@ -1115,9 +928,7 @@ contract LeagueTreasuryTest is Test {
 
         vm.expectRevert(
             abi.encodeWithSelector(
-                LeagueTreasury.LeagueTreasury__RankingLengthMismatch.selector,
-                TEAM_COUNT,
-                TEAM_COUNT - 1
+                LeagueTreasury.LeagueTreasury__RankingLengthMismatch.selector, TEAM_COUNT, TEAM_COUNT - 1
             )
         );
         vm.prank(commissioner);
@@ -1129,9 +940,7 @@ contract LeagueTreasuryTest is Test {
         uint32[] memory corrected = _reversedRanking();
         corrected[1] = corrected[0]; // team 14 listed twice, team 13 missing
 
-        vm.expectRevert(
-            abi.encodeWithSelector(LeagueTreasury.LeagueTreasury__DuplicateTeam.selector, TEAM_COUNT)
-        );
+        vm.expectRevert(abi.encodeWithSelector(LeagueTreasury.LeagueTreasury__DuplicateTeam.selector, TEAM_COUNT));
         vm.prank(commissioner);
         leagueTreasury.resolveDispute(leagueId, corrected);
     }
@@ -1141,9 +950,7 @@ contract LeagueTreasuryTest is Test {
         uint32[] memory corrected = _reversedRanking();
         corrected[3] = 99;
 
-        vm.expectRevert(
-            abi.encodeWithSelector(LeagueTreasury.LeagueTreasury__InvalidTeamId.selector, 99)
-        );
+        vm.expectRevert(abi.encodeWithSelector(LeagueTreasury.LeagueTreasury__InvalidTeamId.selector, 99));
         vm.prank(commissioner);
         leagueTreasury.resolveDispute(leagueId, corrected);
     }
@@ -1186,10 +993,7 @@ contract LeagueTreasuryTest is Test {
 
         // places 2..14 get exactly their share of the pot
         for (uint32 place = 2; place <= TEAM_COUNT; place++) {
-            assertEq(
-                leagueTreasury.getPayout(leagueId, _member(place)),
-                (pot * bps[place - 1]) / 10000
-            );
+            assertEq(leagueTreasury.getPayout(leagueId, _member(place)), (pot * bps[place - 1]) / 10000);
         }
     }
 
@@ -1271,9 +1075,7 @@ contract LeagueTreasuryTest is Test {
     function test_RevertWhen_NonMemberClaims() public {
         uint256 leagueId = _finalizedLeague();
 
-        vm.expectRevert(
-            abi.encodeWithSelector(LeagueTreasury.LeagueTreasury__NotMember.selector, leagueId, alice)
-        );
+        vm.expectRevert(abi.encodeWithSelector(LeagueTreasury.LeagueTreasury__NotMember.selector, leagueId, alice));
         vm.prank(alice);
         leagueTreasury.claim(leagueId);
     }
@@ -1298,20 +1100,14 @@ contract LeagueTreasuryTest is Test {
         _claim(_member(1), leagueId);
 
         vm.expectRevert(
-            abi.encodeWithSelector(
-                LeagueTreasury.LeagueTreasury__AlreadyClaimed.selector,
-                leagueId,
-                _member(1)
-            )
+            abi.encodeWithSelector(LeagueTreasury.LeagueTreasury__AlreadyClaimed.selector, leagueId, _member(1))
         );
         vm.prank(_member(1));
         leagueTreasury.claim(leagueId);
     }
 
     function test_RevertWhen_ClaimingMissingLeague() public {
-        vm.expectRevert(
-            abi.encodeWithSelector(LeagueTreasury.LeagueTreasury__LeagueNotFound.selector, 7)
-        );
+        vm.expectRevert(abi.encodeWithSelector(LeagueTreasury.LeagueTreasury__LeagueNotFound.selector, 7));
         vm.prank(alice);
         leagueTreasury.claim(7);
     }
@@ -1326,11 +1122,7 @@ contract LeagueTreasuryTest is Test {
         uint256 payout = leagueTreasury.getPayout(leagueId, address(wallet));
 
         vm.expectRevert(
-            abi.encodeWithSelector(
-                LeagueTreasury.LeagueTreasury__TransferFailed.selector,
-                address(wallet),
-                payout
-            )
+            abi.encodeWithSelector(LeagueTreasury.LeagueTreasury__TransferFailed.selector, address(wallet), payout)
         );
         wallet.claim(leagueId);
 
@@ -1396,5 +1188,328 @@ contract LeagueTreasuryTest is Test {
                 leagueTreasury.getPayout(leagueId, makeAddr(string.concat("fm", vm.toString(place + 1))))
             );
         }
+    }
+
+    /*//////////////////////////////////////////////////////////////
+                              cancelLeague
+    //////////////////////////////////////////////////////////////*/
+
+    function test_CancelLeague_SetsCancelledAndEmits() public {
+        uint256 leagueId = _createLeague();
+
+        vm.expectEmit(true, true, true, true);
+        emit LeagueTreasury.LeagueCancelled(leagueId);
+        vm.prank(commissioner);
+        leagueTreasury.cancelLeague(leagueId);
+
+        assertEq(uint8(_state(leagueId)), uint8(LeagueTreasury.LeagueState.CANCELLED));
+    }
+
+    function test_RevertWhen_NonCommissionerCancels() public {
+        uint256 leagueId = _createLeague();
+
+        vm.expectRevert(abi.encodeWithSelector(LeagueTreasury.LeagueTreasury__NotCommissioner.selector, alice));
+        vm.prank(alice);
+        leagueTreasury.cancelLeague(leagueId);
+    }
+
+    function test_RevertWhen_CancellingActiveLeague() public {
+        uint256 leagueId = _activeLeague();
+
+        vm.expectRevert(
+            abi.encodeWithSelector(
+                LeagueTreasury.LeagueTreasury__InvalidState.selector,
+                leagueId,
+                LeagueTreasury.LeagueState.OPEN,
+                LeagueTreasury.LeagueState.ACTIVE
+            )
+        );
+        vm.prank(commissioner);
+        leagueTreasury.cancelLeague(leagueId);
+    }
+
+    function test_RevertWhen_JoiningCancelledLeague() public {
+        uint256 leagueId = _createLeague();
+        vm.prank(commissioner);
+        leagueTreasury.cancelLeague(leagueId);
+
+        vm.expectRevert(
+            abi.encodeWithSelector(
+                LeagueTreasury.LeagueTreasury__LeagueNotOpen.selector, leagueId, LeagueTreasury.LeagueState.CANCELLED
+            )
+        );
+        _join(alice, leagueId, 1);
+    }
+
+    /*//////////////////////////////////////////////////////////////
+                              isRefundable
+    //////////////////////////////////////////////////////////////*/
+
+    function test_IsRefundable_OpenLeagueOnlyAtJoinDeadline() public {
+        uint256 leagueId = _createLeague();
+        uint256 joinDeadline = block.timestamp + 1 days;
+
+        vm.warp(joinDeadline - 1);
+        assertFalse(leagueTreasury.isRefundable(leagueId));
+        vm.warp(joinDeadline);
+        assertTrue(leagueTreasury.isRefundable(leagueId));
+    }
+
+    function test_IsRefundable_ActiveLeagueOnlyAtStandingsDeadline() public {
+        uint256 leagueId = _activeLeague();
+        uint256 standingsDeadline = block.timestamp + 2 days;
+
+        vm.warp(standingsDeadline - 1);
+        assertFalse(leagueTreasury.isRefundable(leagueId));
+        vm.warp(standingsDeadline);
+        assertTrue(leagueTreasury.isRefundable(leagueId));
+    }
+
+    function test_IsRefundable_DisputedLeagueOnlyAfterResolutionWindow() public {
+        uint256 leagueId = _disputedLeague();
+        uint256 windowEnd = block.timestamp + leagueTreasury.DISPUTE_RESOLUTION_WINDOW();
+
+        vm.warp(windowEnd - 1);
+        assertFalse(leagueTreasury.isRefundable(leagueId));
+        vm.warp(windowEnd);
+        assertTrue(leagueTreasury.isRefundable(leagueId));
+    }
+
+    function test_IsRefundable_FalseOnceStandingsSubmitted() public {
+        uint256 leagueId = _submittedLeague();
+        vm.warp(block.timestamp + 365 days); // even long after every deadline
+        assertFalse(leagueTreasury.isRefundable(leagueId));
+    }
+
+    function test_IsRefundable_FalseWhenFinalized() public {
+        uint256 leagueId = _finalizedLeague();
+        vm.warp(block.timestamp + 365 days);
+        assertFalse(leagueTreasury.isRefundable(leagueId));
+    }
+
+    function test_IsRefundable_TrueWhenCancelled() public {
+        uint256 leagueId = _createLeague();
+        vm.prank(commissioner);
+        leagueTreasury.cancelLeague(leagueId);
+        assertTrue(leagueTreasury.isRefundable(leagueId));
+    }
+
+    /*//////////////////////////////////////////////////////////////
+                        withdrawRefund: each exit
+    //////////////////////////////////////////////////////////////*/
+
+    function test_Refund_LeagueNeverFills() public {
+        uint256 leagueId = _createLeague();
+        _join(alice, leagueId, 1);
+        _join(bob, leagueId, 2);
+        vm.warp(block.timestamp + 1 days); // join deadline passes, only 2 of 14 joined
+
+        assertEq(_refund(alice, leagueId), BUY_IN);
+        assertEq(_refund(bob, leagueId), BUY_IN);
+        assertEq(address(leagueTreasury).balance, 0);
+    }
+
+    function test_Refund_AfterCommissionerCancels() public {
+        uint256 leagueId = _createLeague();
+        _join(alice, leagueId, 1);
+        vm.prank(commissioner);
+        leagueTreasury.cancelLeague(leagueId);
+
+        assertEq(_refund(alice, leagueId), BUY_IN);
+        assertEq(alice.balance, STARTING_BALANCE);
+    }
+
+    function test_Refund_ReporterNeverSubmits() public {
+        uint256 leagueId = _activeLeague();
+        vm.warp(block.timestamp + 2 days); // standings deadline passes
+
+        for (uint32 i = 1; i <= TEAM_COUNT; i++) {
+            assertEq(_refund(_member(i), leagueId), BUY_IN);
+        }
+        assertEq(address(leagueTreasury).balance, 0);
+    }
+
+    function test_Refund_DisputeNeverResolved() public {
+        uint256 leagueId = _disputedLeague();
+        vm.warp(block.timestamp + leagueTreasury.DISPUTE_RESOLUTION_WINDOW());
+
+        for (uint32 i = 1; i <= TEAM_COUNT; i++) {
+            assertEq(_refund(_member(i), leagueId), BUY_IN);
+        }
+        assertEq(address(leagueTreasury).balance, 0);
+    }
+
+    function test_Refund_FirstRefundCancelsLeague() public {
+        uint256 leagueId = _createLeague();
+        _join(alice, leagueId, 1);
+        vm.warp(block.timestamp + 1 days);
+
+        vm.expectEmit(true, true, true, true);
+        emit LeagueTreasury.LeagueCancelled(leagueId);
+        vm.expectEmit(true, true, true, true);
+        emit LeagueTreasury.RefundWithdrawn(leagueId, alice, BUY_IN);
+        _refund(alice, leagueId);
+
+        assertEq(uint8(_state(leagueId)), uint8(LeagueTreasury.LeagueState.CANCELLED));
+    }
+
+    /*//////////////////////////////////////////////////////////////
+               withdrawRefund: once an exit opens, others close
+    //////////////////////////////////////////////////////////////*/
+
+    function test_RevertWhen_ResolvingAtResolutionWindowClose() public {
+        uint256 leagueId = _disputedLeague();
+        uint256 windowEnd = block.timestamp + leagueTreasury.DISPUTE_RESOLUTION_WINDOW();
+        vm.warp(windowEnd);
+        uint32[] memory corrected = _reversedRanking();
+
+        vm.expectRevert(
+            abi.encodeWithSelector(
+                LeagueTreasury.LeagueTreasury__DisputeResolutionWindowClosed.selector, leagueId, windowEnd
+            )
+        );
+        vm.prank(commissioner);
+        leagueTreasury.resolveDispute(leagueId, corrected);
+    }
+
+    function test_ResolveDispute_OneSecondBeforeWindowCloses() public {
+        uint256 leagueId = _disputedLeague();
+        vm.warp(block.timestamp + leagueTreasury.DISPUTE_RESOLUTION_WINDOW() - 1);
+
+        vm.prank(commissioner);
+        leagueTreasury.resolveDispute(leagueId, _reversedRanking());
+
+        assertEq(uint8(_state(leagueId)), uint8(LeagueTreasury.LeagueState.FINALIZED));
+    }
+
+    function test_RevertWhen_ClaimingAfterRefundsStart() public {
+        uint256 leagueId = _disputedLeague();
+        vm.warp(block.timestamp + leagueTreasury.DISPUTE_RESOLUTION_WINDOW());
+        _refund(_member(1), leagueId);
+
+        vm.expectRevert(
+            abi.encodeWithSelector(
+                LeagueTreasury.LeagueTreasury__InvalidState.selector,
+                leagueId,
+                LeagueTreasury.LeagueState.FINALIZED,
+                LeagueTreasury.LeagueState.CANCELLED
+            )
+        );
+        vm.prank(_member(2));
+        leagueTreasury.claim(leagueId);
+    }
+
+    function test_RevertWhen_SubmittingAfterRefundsStart() public {
+        uint256 leagueId = _activeLeague();
+        vm.warp(block.timestamp + 2 days);
+        _refund(_member(1), leagueId);
+        uint32[] memory ranking = _ranking();
+
+        vm.expectRevert(
+            abi.encodeWithSelector(
+                LeagueTreasury.LeagueTreasury__InvalidState.selector,
+                leagueId,
+                LeagueTreasury.LeagueState.ACTIVE,
+                LeagueTreasury.LeagueState.CANCELLED
+            )
+        );
+        _submit(leagueId, ranking);
+    }
+
+    /*//////////////////////////////////////////////////////////////
+                         withdrawRefund: reverts
+    //////////////////////////////////////////////////////////////*/
+
+    function test_RevertWhen_RefundingTwice() public {
+        uint256 leagueId = _createLeague();
+        _join(alice, leagueId, 1);
+        vm.warp(block.timestamp + 1 days);
+        _refund(alice, leagueId);
+
+        vm.expectRevert(abi.encodeWithSelector(LeagueTreasury.LeagueTreasury__AlreadyClaimed.selector, leagueId, alice));
+        vm.prank(alice);
+        leagueTreasury.withdrawRefund(leagueId);
+    }
+
+    function test_RevertWhen_NonMemberRefunds() public {
+        uint256 leagueId = _createLeague();
+        _join(alice, leagueId, 1);
+        vm.warp(block.timestamp + 1 days);
+
+        vm.expectRevert(abi.encodeWithSelector(LeagueTreasury.LeagueTreasury__NotMember.selector, leagueId, bob));
+        vm.prank(bob);
+        leagueTreasury.withdrawRefund(leagueId);
+    }
+
+    function test_RevertWhen_RefundingBeforeDeadline() public {
+        uint256 leagueId = _createLeague();
+        _join(alice, leagueId, 1);
+
+        vm.expectRevert(
+            abi.encodeWithSelector(
+                LeagueTreasury.LeagueTreasury__NotRefundable.selector, leagueId, LeagueTreasury.LeagueState.OPEN
+            )
+        );
+        vm.prank(alice);
+        leagueTreasury.withdrawRefund(leagueId);
+    }
+
+    function test_RevertWhen_RefundingFinalizedLeague() public {
+        uint256 leagueId = _finalizedLeague();
+
+        vm.expectRevert(
+            abi.encodeWithSelector(
+                LeagueTreasury.LeagueTreasury__NotRefundable.selector, leagueId, LeagueTreasury.LeagueState.FINALIZED
+            )
+        );
+        vm.prank(_member(1));
+        leagueTreasury.withdrawRefund(leagueId);
+    }
+
+    function test_RevertWhen_RefundingAfterClaiming() public {
+        // a member who claimed a payout can never also take a refund
+        uint256 leagueId = _finalizedLeague();
+        _claim(_member(1), leagueId);
+
+        vm.expectRevert(
+            abi.encodeWithSelector(LeagueTreasury.LeagueTreasury__AlreadyClaimed.selector, leagueId, _member(1))
+        );
+        vm.prank(_member(1));
+        leagueTreasury.withdrawRefund(leagueId);
+    }
+
+    /*//////////////////////////////////////////////////////////////
+                           refund fuzz test
+    //////////////////////////////////////////////////////////////*/
+
+    /// However many members joined and whatever the buy-in, refunding everyone
+    /// returns exactly what they paid and empties the contract.
+    function testFuzz_RefundsReturnExactlyWhatWasPaid(uint256 buyIn, uint8 joined) public {
+        buyIn = bound(buyIn, 1, 1_000 ether);
+        joined = uint8(bound(joined, 1, TEAM_COUNT - 1)); // league never fills
+
+        vm.prank(commissioner);
+        uint256 leagueId = leagueTreasury.createLeague(
+            reporter,
+            buyIn,
+            TEAM_COUNT,
+            uint64(block.timestamp + 1 days),
+            uint64(block.timestamp + 2 days),
+            _linearPayout(TEAM_COUNT)
+        );
+        for (uint32 i = 1; i <= joined; i++) {
+            address m = makeAddr(string.concat("fm", vm.toString(i)));
+            vm.deal(m, buyIn);
+            vm.prank(m);
+            leagueTreasury.joinLeague{value: buyIn}(leagueId, i);
+        }
+        vm.warp(block.timestamp + 1 days);
+
+        for (uint32 i = 1; i <= joined; i++) {
+            address m = makeAddr(string.concat("fm", vm.toString(i)));
+            assertEq(_refund(m, leagueId), buyIn);
+            assertEq(m.balance, buyIn);
+        }
+        assertEq(address(leagueTreasury).balance, 0);
     }
 }

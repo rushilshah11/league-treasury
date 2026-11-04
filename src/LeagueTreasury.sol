@@ -50,9 +50,17 @@ contract LeagueTreasury {
         uint256 leagueId,
         uint256 closedAt
     );
-    error LeagueTreasury__ChallengeWindowOpen(uint256 leagueId, uint256 closesAt);
+    error LeagueTreasury__ChallengeWindowOpen(
+        uint256 leagueId,
+        uint256 closesAt
+    );
     error LeagueTreasury__AlreadyClaimed(uint256 leagueId, address member);
     error LeagueTreasury__TransferFailed(address recipient, uint256 amount);
+    error LeagueTreasury__NotRefundable(uint256 leagueId, LeagueState state);
+    error LeagueTreasury__DisputeResolutionWindowClosed(
+        uint256 leagueId,
+        uint256 closedAt
+    );
 
     /*//////////////////////////////////////////////////////////////
                            TYPE DECLARATIONS
@@ -94,6 +102,7 @@ contract LeagueTreasury {
 
     uint256 public constant TOTAL_BPS = 10000; // 100% in basis points
     uint256 public constant CHALLENGE_WINDOW = 48 hours;
+    uint256 public constant DISPUTE_RESOLUTION_WINDOW = 7 days;
 
     uint256 public nextLeagueId;
     mapping(uint256 => League) public leagues;
@@ -123,6 +132,12 @@ contract LeagueTreasury {
     event StandingsFinalized(uint256 indexed leagueId);
     event DisputeResolved(uint256 indexed leagueId);
     event PayoutClaimed(
+        uint256 indexed leagueId,
+        address indexed member,
+        uint256 amount
+    );
+    event LeagueCancelled(uint256 indexed leagueId);
+    event RefundWithdrawn(
         uint256 indexed leagueId,
         address indexed member,
         uint256 amount
@@ -286,6 +301,8 @@ contract LeagueTreasury {
             if (member.finalPlace != 0) {
                 revert LeagueTreasury__DuplicateTeam(teamId);
             }
+            // casting to 'uint8' is safe because i < teamCount, which is a uint8
+            // forge-lint: disable-next-line(unsafe-typecast)
             member.finalPlace = uint8(i + 1);
         }
     }
@@ -312,6 +329,8 @@ contract LeagueTreasury {
 
         _recordStandings(leagueId, rankedTeamIds);
 
+        // casting to 'uint64' is safe because timestamps fit until year ~584 billion
+        // forge-lint: disable-next-line(unsafe-typecast)
         uint64 submittedAt = uint64(block.timestamp);
         league.state = LeagueState.STANDINGS_SUBMITTED;
         league.standingsSubmittedAt = submittedAt;
@@ -340,6 +359,8 @@ contract LeagueTreasury {
         }
 
         league.state = LeagueState.DISPUTED;
+        // casting to 'uint64' is safe because timestamps fit until year ~584 billion
+        // forge-lint: disable-next-line(unsafe-typecast)
         league.disputedAt = uint64(block.timestamp);
         emit StandingsDisputed(leagueId, msg.sender);
     }
@@ -376,12 +397,108 @@ contract LeagueTreasury {
             );
         }
 
+        uint256 windowEnd = league.disputedAt + DISPUTE_RESOLUTION_WINDOW;
+        if (block.timestamp >= windowEnd) {
+            revert LeagueTreasury__DisputeResolutionWindowClosed(
+                leagueId,
+                windowEnd
+            );
+        }
+
         _recordStandings(leagueId, correctedRanking);
         league.state = LeagueState.FINALIZED;
         emit DisputeResolved(leagueId);
     }
 
-    function getPayout(uint256 leagueId, address member) public view returns (uint256) {
+    function claim(uint256 leagueId) external leagueExists(leagueId) {
+        League storage league = leagues[leagueId];
+        Member storage member = members[leagueId][msg.sender];
+
+        if (!member.joined) {
+            revert LeagueTreasury__NotMember(leagueId, msg.sender);
+        }
+        if (league.state != LeagueState.FINALIZED) {
+            revert LeagueTreasury__InvalidState(
+                leagueId,
+                LeagueState.FINALIZED,
+                league.state
+            );
+        }
+        if (member.claimed) {
+            revert LeagueTreasury__AlreadyClaimed(leagueId, msg.sender);
+        }
+
+        uint256 payout = getPayout(leagueId, msg.sender);
+        member.claimed = true;
+        emit PayoutClaimed(leagueId, msg.sender, payout);
+
+        if (payout > 0) {
+            (bool success, ) = payable(msg.sender).call{value: payout}("");
+            if (!success) {
+                revert LeagueTreasury__TransferFailed(msg.sender, payout);
+            }
+        }
+    }
+
+    function cancelLeague(
+        uint256 leagueId
+    ) external leagueExists(leagueId) onlyCommissioner(leagueId) {
+        League storage league = leagues[leagueId];
+        if (league.state != LeagueState.OPEN) {
+            revert LeagueTreasury__InvalidState(
+                leagueId,
+                LeagueState.OPEN,
+                league.state
+            );
+        }
+
+        league.state = LeagueState.CANCELLED;
+        emit LeagueCancelled(leagueId);
+    }
+
+    function withdrawRefund(uint256 leagueId) external leagueExists(leagueId) {
+        League storage league = leagues[leagueId];
+        Member storage member = members[leagueId][msg.sender];
+
+        if (!member.joined) {
+            revert LeagueTreasury__NotMember(leagueId, msg.sender);
+        }
+        if (member.claimed) {
+            revert LeagueTreasury__AlreadyClaimed(leagueId, msg.sender);
+        }
+        if (!isRefundable(leagueId)) {
+            revert LeagueTreasury__NotRefundable(leagueId, league.state);
+        }
+
+        if (league.state != LeagueState.CANCELLED) {
+            league.state = LeagueState.CANCELLED;
+            emit LeagueCancelled(leagueId);
+        }
+        member.claimed = true;
+
+        uint256 amount = league.buyIn;
+        emit RefundWithdrawn(leagueId, msg.sender, amount);
+
+        (bool success, ) = payable(msg.sender).call{value: amount}("");
+        if (!success) {
+            revert LeagueTreasury__TransferFailed(msg.sender, amount);
+        }
+    }
+
+    /*//////////////////////////////////////////////////////////////
+                             VIEW FUNCTIONS
+    //////////////////////////////////////////////////////////////*/
+
+    function getPayoutBps(
+        uint256 leagueId
+    ) external view leagueExists(leagueId) returns (uint16[] memory) {
+        return payoutBps[leagueId];
+    }
+
+    function getPayout(
+        uint256 leagueId,
+        address member
+    ) public view returns (uint256) {
         League storage league = leagues[leagueId];
         Member storage m = members[leagueId][member];
 
@@ -406,44 +523,26 @@ contract LeagueTreasury {
         return 0;
     }
 
-    function claim(uint256 leagueId) external leagueExists(leagueId) {
-        League storage league = leagues[leagueId];
-        Member storage member = members[leagueId][msg.sender];
-
-        if (!member.joined) {
-            revert LeagueTreasury__NotMember(leagueId, msg.sender);
-        }
-        if (league.state != LeagueState.FINALIZED) {
-            revert LeagueTreasury__InvalidState(
-                leagueId,
-                LeagueState.FINALIZED,
-                league.state
-            );
-        }
-        if (member.claimed) {
-            revert LeagueTreasury__AlreadyClaimed(leagueId, msg.sender);
-        }
-
-        uint256 payout = getPayout(leagueId, msg.sender);
-        member.claimed = true;
-
-        if (payout > 0) {
-            (bool success, ) = payable(msg.sender).call{value: payout}("");
-            if (!success) {
-                revert LeagueTreasury__TransferFailed(msg.sender, payout);
-            }
-        }
-
-        emit PayoutClaimed(leagueId, msg.sender, payout);
-    }
-
-    /*//////////////////////////////////////////////////////////////
-                             VIEW FUNCTIONS
-    //////////////////////////////////////////////////////////////*/
-
-    function getPayoutBps(
+    function isRefundable(
         uint256 leagueId
-    ) external view leagueExists(leagueId) returns (uint16[] memory) {
-        return payoutBps[leagueId];
+    ) public view leagueExists(leagueId) returns (bool) {
+        League storage league = leagues[leagueId];
+        LeagueState state = league.state;
+
+        if (state == LeagueState.CANCELLED) {
+            return true;
+        }
+        if (state == LeagueState.OPEN) {
+            return block.timestamp >= league.joinDeadline;
+        }
+        if (state == LeagueState.ACTIVE) {
+            return block.timestamp >= league.standingsDeadline;
+        }
+        if (state == LeagueState.DISPUTED) {
+            return
+                block.timestamp >=
+                league.disputedAt + DISPUTE_RESOLUTION_WINDOW;
+        }
+        return false;
     }
 }
