@@ -1,11 +1,12 @@
-import { PageShell } from '../components/PageShell'
+import { PageShell } from '@/components/PageShell'
+import { Text } from '@/components/typography'
 
 export function CreateLeague() {
   return (
     <PageShell title="Create a league">
-      <p className="max-w-[60ch] text-lg leading-relaxed text-dust">
+      <Text variant="lead" className="max-w-[60ch]">
         Set your league's name, buy-in, team count and deadlines. When the league is created, you'll get an invite link to share with your league.
-      </p>
+      </Text>
     </PageShell>
   )
 }

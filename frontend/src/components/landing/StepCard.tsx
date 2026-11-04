@@ -1,18 +1,22 @@
+import { Card, CardDescription, CardTitle } from '@/components/ui/card'
+
 type StepCardProps = {
   number: number
   title: string
   body: string
 }
 
-/** One step of the season, as a standalone panel. */
+/** One step of the season, as a standalone card. */
 export function StepCard({ number, title, body }: StepCardProps) {
   return (
-    <li className="flex gap-6 border border-line border-l-4 border-l-ember bg-panel p-7">
-      <span className="text-4xl leading-none font-bold text-flare">{number}</span>
-      <div>
-        <h3 className="text-xl font-bold">{title}</h3>
-        <p className="mt-2 leading-relaxed text-dust">{body}</p>
-      </div>
+    <li>
+      <Card className="flex-row gap-6 border-l-4 border-l-accent">
+        <span className="text-title leading-none font-bold text-primary">{number}</span>
+        <div className="flex flex-col gap-2">
+          <CardTitle>{title}</CardTitle>
+          <CardDescription>{body}</CardDescription>
+        </div>
+      </Card>
     </li>
   )
 }

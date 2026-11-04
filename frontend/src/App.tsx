@@ -1,9 +1,9 @@
 import { Route, Routes } from 'react-router-dom'
-import { Landing } from './pages/Landing'
-import { CreateLeague } from './pages/CreateLeague'
-import { MyLeagues } from './pages/MyLeagues'
-import { LeaguePage } from './pages/LeaguePage'
-import { JoinLeague } from './pages/JoinLeague'
+import { Landing } from '@/pages/Landing'
+import { CreateLeague } from '@/pages/CreateLeague'
+import { MyLeagues } from '@/pages/MyLeagues'
+import { LeaguePage } from '@/pages/LeaguePage'
+import { JoinLeague } from '@/pages/JoinLeague'
 
 export default function App() {
   return (

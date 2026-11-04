@@ -1,7 +1,7 @@
-import { Hero } from '../components/landing/Hero'
-import { HowItWorks } from '../components/landing/HowItWorks'
-import { Footnote } from '../components/landing/Footnote'
-import { landing } from '../content/landing'
+import { Hero } from '@/components/landing/Hero'
+import { HowItWorks } from '@/components/landing/HowItWorks'
+import { Footnote } from '@/components/landing/Footnote'
+import { landing } from '@/content/landing'
 
 export function Landing() {
   return (

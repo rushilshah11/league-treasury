@@ -1,8 +1,8 @@
 import { ConnectButton } from '@rainbow-me/rainbowkit'
-import { Button } from './Button'
+import { Button } from '@/components/ui/button'
 
 /**
- * RainbowKit's wallet logic with our own square, on-brand button.
+ * RainbowKit's wallet logic with our own shadcn Button.
  * Clicking opens RainbowKit's wallet picker.
  */
 export function ConnectWallet() {
@@ -13,7 +13,7 @@ export function ConnectWallet() {
 
         if (!account || !chain) {
           return (
-            <Button variant="secondary" onClick={openConnectModal}>
+            <Button variant="outline" onClick={openConnectModal}>
               Connect wallet
             </Button>
           )
@@ -21,14 +21,14 @@ export function ConnectWallet() {
 
         if (chain.unsupported) {
           return (
-            <Button variant="secondary" onClick={openChainModal}>
+            <Button variant="outline" onClick={openChainModal}>
               Switch network
             </Button>
           )
         }
 
         return (
-          <Button variant="secondary" onClick={openAccountModal}>
+          <Button variant="outline" onClick={openAccountModal}>
             {account.displayName}
           </Button>
         )
