@@ -1,5 +1,41 @@
 @import "tailwindcss";
 
+/*
+  On-Chain Commish design tokens.
+  Graphite court with an orange-red flare. Square edges, no shadows.
+*/
+@theme {
+  --font-sans: Calibri, Carlito, "Segoe UI", system-ui, sans-serif;
+
+  --color-ink: #141311;       /* page background: warm graphite */
+  --color-panel: #1b1a17;     /* slightly raised surfaces */
+  --color-line: #2c2a26;      /* 1px rules and borders */
+  --color-chalk: #ece8e1;     /* primary text */
+  --color-dust: #8c877e;      /* secondary text */
+  --color-flare: #ff5a1f;     /* orange-red: primary actions and highlights */
+  --color-ember: #d7341e;     /* deeper red: hover states and secondary accents */
+
+  /* No rounded corners anywhere, including third-party components. */
+  --radius-sm: 0;
+  --radius: 0;
+  --radius-md: 0;
+  --radius-lg: 0;
+  --radius-xl: 0;
+}
+
+html {
+  font-feature-settings: "tnum" 1; /* tabular figures: numbers line up like a scoreboard */
+}
+
 body {
-  @apply bg-zinc-950 text-zinc-100 antialiased;
+  @apply bg-ink text-chalk font-sans antialiased;
+}
+
+::selection {
+  @apply bg-flare text-ink;
+}
+
+:focus-visible {
+  outline: 2px solid var(--color-flare);
+  outline-offset: 2px;
 }
