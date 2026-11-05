@@ -3,6 +3,12 @@ export const landing = {
   slogan: 'The commissioner every fantasy league can trust.',
   description:
     "Your fantasy league's buy-ins are held by code until the season ends, then paid out by final standings. Every team gets something back.",
+  demo: {
+    video: '/demo/walkthrough.mp4',
+    poster: '/demo/walkthrough-poster.jpg',
+    caption: 'A full season, start to payout',
+    label: 'A full season in On-Chain Commish: create a league, managers join, live ESPN standings, final standings posted, payouts claimed.',
+  },
   footnote: 'Funds are held by an open-source smart contract. Test network only, no real money.',
   howItWorksTitle: 'How a season works',
   steps: [

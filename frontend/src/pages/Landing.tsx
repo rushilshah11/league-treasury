@@ -6,7 +6,7 @@ import { landing } from '@/content/landing'
 export function Landing() {
   return (
     <>
-      <Hero name={landing.name} slogan={landing.slogan} description={landing.description} />
+      <Hero name={landing.name} slogan={landing.slogan} description={landing.description} demo={landing.demo} />
       <HowItWorks title={landing.howItWorksTitle} steps={landing.steps} />
       <Footnote>{landing.footnote}</Footnote>
     </>
