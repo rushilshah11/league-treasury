@@ -15,3 +15,16 @@ export function linearPayoutBps(teamCount: number): number[] {
   bps[0] += remainder
   return bps
 }
+
+/** Each place's payout in wei, matching the contract's getPayout (1st place gets the rounding dust). */
+export function payoutAmounts(pot: bigint, bps: number[]): bigint[] {
+  const amounts = bps.map((b) => (pot * BigInt(b)) / BigInt(TOTAL_BPS))
+  const othersTotal = amounts.slice(1).reduce((a, b) => a + b, 0n)
+  amounts[0] = pot - othersTotal
+  return amounts
+}
+
+/** 1333 -> "13.33%" */
+export function formatBps(bps: number): string {
+  return `${(bps / 100).toFixed(2)}%`
+}
