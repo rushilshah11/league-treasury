@@ -11,4 +11,4 @@ import type { Address } from 'viem'
 const ANVIL_ACCOUNT_19: Address = '0x8626f6940E2eb28930eFb4CeF49B2d1F2C9C1199'
 
 export const REPORTER_ADDRESS: Address =
-  (import.meta.env.VITE_REPORTER_ADDRESS as Address | undefined) ?? ANVIL_ACCOUNT_19
+  (import.meta.env.VITE_REPORTER_ADDRESS as Address | undefined) || ANVIL_ACCOUNT_19

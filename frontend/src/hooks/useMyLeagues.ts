@@ -1,6 +1,7 @@
 import { useQuery } from '@tanstack/react-query'
 import { useAccount, usePublicClient } from 'wagmi'
 import { leagueTreasury } from '@/config/contracts'
+import { scanEvents } from '@/lib/logs'
 
 export type MyLeague = { id: bigint; isCommissioner: boolean; isMember: boolean }
 
@@ -17,18 +18,12 @@ export function useMyLeagues() {
     enabled: !!address && !!client,
     queryFn: async (): Promise<MyLeague[]> => {
       const [created, joined] = await Promise.all([
-        client!.getContractEvents({
-          ...leagueTreasury,
-          eventName: 'LeagueCreated',
-          args: { commissioner: address },
-          fromBlock: 0n,
-        }),
-        client!.getContractEvents({
-          ...leagueTreasury,
-          eventName: 'MemberJoined',
-          args: { member: address },
-          fromBlock: 0n,
-        }),
+        scanEvents(client!, (range) =>
+          client!.getContractEvents({ ...leagueTreasury, eventName: 'LeagueCreated', args: { commissioner: address }, ...range }),
+        ),
+        scanEvents(client!, (range) =>
+          client!.getContractEvents({ ...leagueTreasury, eventName: 'MemberJoined', args: { member: address }, ...range }),
+        ),
       ])
 
       const byId = new Map<bigint, MyLeague>()

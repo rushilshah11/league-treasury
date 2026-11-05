@@ -1,0 +1,1366 @@
+[
+  {
+    "type": "function",
+    "name": "CHALLENGE_WINDOW",
+    "inputs": [],
+    "outputs": [
+      {
+        "name": "",
+        "type": "uint256",
+        "internalType": "uint256"
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
+    "name": "DISPUTE_RESOLUTION_WINDOW",
+    "inputs": [],
+    "outputs": [
+      {
+        "name": "",
+        "type": "uint256",
+        "internalType": "uint256"
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
+    "name": "MAX_NAME_LENGTH",
+    "inputs": [],
+    "outputs": [
+      {
+        "name": "",
+        "type": "uint256",
+        "internalType": "uint256"
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
+    "name": "TOTAL_BPS",
+    "inputs": [],
+    "outputs": [
+      {
+        "name": "",
+        "type": "uint256",
+        "internalType": "uint256"
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
+    "name": "approveProposal",
+    "inputs": [
+      {
+        "name": "leagueId",
+        "type": "uint256",
+        "internalType": "uint256"
+      },
+      {
+        "name": "proposalId",
+        "type": "uint256",
+        "internalType": "uint256"
+      }
+    ],
+    "outputs": [],
+    "stateMutability": "nonpayable"
+  },
+  {
+    "type": "function",
+    "name": "cancelLeague",
+    "inputs": [
+      {
+        "name": "leagueId",
+        "type": "uint256",
+        "internalType": "uint256"
+      }
+    ],
+    "outputs": [],
+    "stateMutability": "nonpayable"
+  },
+  {
+    "type": "function",
+    "name": "claim",
+    "inputs": [
+      {
+        "name": "leagueId",
+        "type": "uint256",
+        "internalType": "uint256"
+      }
+    ],
+    "outputs": [],
+    "stateMutability": "nonpayable"
+  },
+  {
+    "type": "function",
+    "name": "createLeague",
+    "inputs": [
+      {
+        "name": "name",
+        "type": "string",
+        "internalType": "string"
+      },
+      {
+        "name": "espn",
+        "type": "tuple",
+        "internalType": "struct LeagueTreasury.EspnLink",
+        "components": [
+          {
+            "name": "leagueId",
+            "type": "uint64",
+            "internalType": "uint64"
+          },
+          {
+            "name": "season",
+            "type": "uint16",
+            "internalType": "uint16"
+          },
+          {
+            "name": "sport",
+            "type": "uint8",
+            "internalType": "enum LeagueTreasury.Sport"
+          }
+        ]
+      },
+      {
+        "name": "reporter",
+        "type": "address",
+        "internalType": "address"
+      },
+      {
+        "name": "buyIn",
+        "type": "uint256",
+        "internalType": "uint256"
+      },
+      {
+        "name": "teamCount",
+        "type": "uint8",
+        "internalType": "uint8"
+      },
+      {
+        "name": "joinDeadline",
+        "type": "uint64",
+        "internalType": "uint64"
+      },
+      {
+        "name": "standingsDeadline",
+        "type": "uint64",
+        "internalType": "uint64"
+      },
+      {
+        "name": "payout",
+        "type": "uint16[]",
+        "internalType": "uint16[]"
+      },
+      {
+        "name": "commissionerTeamId",
+        "type": "uint32",
+        "internalType": "uint32"
+      }
+    ],
+    "outputs": [
+      {
+        "name": "leagueId",
+        "type": "uint256",
+        "internalType": "uint256"
+      }
+    ],
+    "stateMutability": "payable"
+  },
+  {
+    "type": "function",
+    "name": "dispute",
+    "inputs": [
+      {
+        "name": "leagueId",
+        "type": "uint256",
+        "internalType": "uint256"
+      }
+    ],
+    "outputs": [],
+    "stateMutability": "nonpayable"
+  },
+  {
+    "type": "function",
+    "name": "finalize",
+    "inputs": [
+      {
+        "name": "leagueId",
+        "type": "uint256",
+        "internalType": "uint256"
+      }
+    ],
+    "outputs": [],
+    "stateMutability": "nonpayable"
+  },
+  {
+    "type": "function",
+    "name": "getPayout",
+    "inputs": [
+      {
+        "name": "leagueId",
+        "type": "uint256",
+        "internalType": "uint256"
+      },
+      {
+        "name": "member",
+        "type": "address",
+        "internalType": "address"
+      }
+    ],
+    "outputs": [
+      {
+        "name": "",
+        "type": "uint256",
+        "internalType": "uint256"
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
+    "name": "getPayoutBps",
+    "inputs": [
+      {
+        "name": "leagueId",
+        "type": "uint256",
+        "internalType": "uint256"
+      }
+    ],
+    "outputs": [
+      {
+        "name": "",
+        "type": "uint16[]",
+        "internalType": "uint16[]"
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
+    "name": "getProposal",
+    "inputs": [
+      {
+        "name": "leagueId",
+        "type": "uint256",
+        "internalType": "uint256"
+      },
+      {
+        "name": "proposalId",
+        "type": "uint256",
+        "internalType": "uint256"
+      }
+    ],
+    "outputs": [
+      {
+        "name": "proposer",
+        "type": "address",
+        "internalType": "address"
+      },
+      {
+        "name": "approvals",
+        "type": "uint8",
+        "internalType": "uint8"
+      },
+      {
+        "name": "rankedTeamIds",
+        "type": "uint32[]",
+        "internalType": "uint32[]"
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
+    "name": "hasApproved",
+    "inputs": [
+      {
+        "name": "",
+        "type": "uint256",
+        "internalType": "uint256"
+      },
+      {
+        "name": "",
+        "type": "uint256",
+        "internalType": "uint256"
+      },
+      {
+        "name": "",
+        "type": "address",
+        "internalType": "address"
+      }
+    ],
+    "outputs": [
+      {
+        "name": "",
+        "type": "bool",
+        "internalType": "bool"
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
+    "name": "isRefundable",
+    "inputs": [
+      {
+        "name": "leagueId",
+        "type": "uint256",
+        "internalType": "uint256"
+      }
+    ],
+    "outputs": [
+      {
+        "name": "",
+        "type": "bool",
+        "internalType": "bool"
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
+    "name": "joinLeague",
+    "inputs": [
+      {
+        "name": "leagueId",
+        "type": "uint256",
+        "internalType": "uint256"
+      },
+      {
+        "name": "teamId",
+        "type": "uint32",
+        "internalType": "uint32"
+      }
+    ],
+    "outputs": [],
+    "stateMutability": "payable"
+  },
+  {
+    "type": "function",
+    "name": "leagues",
+    "inputs": [
+      {
+        "name": "",
+        "type": "uint256",
+        "internalType": "uint256"
+      }
+    ],
+    "outputs": [
+      {
+        "name": "commissioner",
+        "type": "address",
+        "internalType": "address"
+      },
+      {
+        "name": "joinDeadline",
+        "type": "uint64",
+        "internalType": "uint64"
+      },
+      {
+        "name": "teamCount",
+        "type": "uint8",
+        "internalType": "uint8"
+      },
+      {
+        "name": "memberCount",
+        "type": "uint8",
+        "internalType": "uint8"
+      },
+      {
+        "name": "state",
+        "type": "uint8",
+        "internalType": "enum LeagueTreasury.LeagueState"
+      },
+      {
+        "name": "reporter",
+        "type": "address",
+        "internalType": "address"
+      },
+      {
+        "name": "standingsDeadline",
+        "type": "uint64",
+        "internalType": "uint64"
+      },
+      {
+        "name": "buyIn",
+        "type": "uint256",
+        "internalType": "uint256"
+      },
+      {
+        "name": "standingsSubmittedAt",
+        "type": "uint64",
+        "internalType": "uint64"
+      },
+      {
+        "name": "disputedAt",
+        "type": "uint64",
+        "internalType": "uint64"
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
+    "name": "members",
+    "inputs": [
+      {
+        "name": "",
+        "type": "uint256",
+        "internalType": "uint256"
+      },
+      {
+        "name": "",
+        "type": "address",
+        "internalType": "address"
+      }
+    ],
+    "outputs": [
+      {
+        "name": "teamId",
+        "type": "uint32",
+        "internalType": "uint32"
+      },
+      {
+        "name": "joined",
+        "type": "bool",
+        "internalType": "bool"
+      },
+      {
+        "name": "claimed",
+        "type": "bool",
+        "internalType": "bool"
+      },
+      {
+        "name": "finalPlace",
+        "type": "uint8",
+        "internalType": "uint8"
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
+    "name": "nextLeagueId",
+    "inputs": [],
+    "outputs": [
+      {
+        "name": "",
+        "type": "uint256",
+        "internalType": "uint256"
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
+    "name": "payoutBps",
+    "inputs": [
+      {
+        "name": "",
+        "type": "uint256",
+        "internalType": "uint256"
+      },
+      {
+        "name": "",
+        "type": "uint256",
+        "internalType": "uint256"
+      }
+    ],
+    "outputs": [
+      {
+        "name": "",
+        "type": "uint16",
+        "internalType": "uint16"
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
+    "name": "proposalCount",
+    "inputs": [
+      {
+        "name": "",
+        "type": "uint256",
+        "internalType": "uint256"
+      }
+    ],
+    "outputs": [
+      {
+        "name": "",
+        "type": "uint256",
+        "internalType": "uint256"
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
+    "name": "proposals",
+    "inputs": [
+      {
+        "name": "",
+        "type": "uint256",
+        "internalType": "uint256"
+      },
+      {
+        "name": "",
+        "type": "uint256",
+        "internalType": "uint256"
+      }
+    ],
+    "outputs": [
+      {
+        "name": "proposer",
+        "type": "address",
+        "internalType": "address"
+      },
+      {
+        "name": "approvals",
+        "type": "uint8",
+        "internalType": "uint8"
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
+    "name": "proposeStandings",
+    "inputs": [
+      {
+        "name": "leagueId",
+        "type": "uint256",
+        "internalType": "uint256"
+      },
+      {
+        "name": "rankedTeamIds",
+        "type": "uint32[]",
+        "internalType": "uint32[]"
+      }
+    ],
+    "outputs": [
+      {
+        "name": "proposalId",
+        "type": "uint256",
+        "internalType": "uint256"
+      }
+    ],
+    "stateMutability": "nonpayable"
+  },
+  {
+    "type": "function",
+    "name": "submitStandings",
+    "inputs": [
+      {
+        "name": "leagueId",
+        "type": "uint256",
+        "internalType": "uint256"
+      },
+      {
+        "name": "rankedTeamIds",
+        "type": "uint32[]",
+        "internalType": "uint32[]"
+      }
+    ],
+    "outputs": [],
+    "stateMutability": "nonpayable"
+  },
+  {
+    "type": "function",
+    "name": "teamOwners",
+    "inputs": [
+      {
+        "name": "",
+        "type": "uint256",
+        "internalType": "uint256"
+      },
+      {
+        "name": "",
+        "type": "uint32",
+        "internalType": "uint32"
+      }
+    ],
+    "outputs": [
+      {
+        "name": "",
+        "type": "address",
+        "internalType": "address"
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
+    "name": "withdrawRefund",
+    "inputs": [
+      {
+        "name": "leagueId",
+        "type": "uint256",
+        "internalType": "uint256"
+      }
+    ],
+    "outputs": [],
+    "stateMutability": "nonpayable"
+  },
+  {
+    "type": "event",
+    "name": "DisputeResolved",
+    "inputs": [
+      {
+        "name": "leagueId",
+        "type": "uint256",
+        "indexed": true,
+        "internalType": "uint256"
+      },
+      {
+        "name": "proposalId",
+        "type": "uint256",
+        "indexed": true,
+        "internalType": "uint256"
+      }
+    ],
+    "anonymous": false
+  },
+  {
+    "type": "event",
+    "name": "LeagueActivated",
+    "inputs": [
+      {
+        "name": "leagueId",
+        "type": "uint256",
+        "indexed": true,
+        "internalType": "uint256"
+      }
+    ],
+    "anonymous": false
+  },
+  {
+    "type": "event",
+    "name": "LeagueCancelled",
+    "inputs": [
+      {
+        "name": "leagueId",
+        "type": "uint256",
+        "indexed": true,
+        "internalType": "uint256"
+      }
+    ],
+    "anonymous": false
+  },
+  {
+    "type": "event",
+    "name": "LeagueCreated",
+    "inputs": [
+      {
+        "name": "leagueId",
+        "type": "uint256",
+        "indexed": true,
+        "internalType": "uint256"
+      },
+      {
+        "name": "commissioner",
+        "type": "address",
+        "indexed": true,
+        "internalType": "address"
+      },
+      {
+        "name": "reporter",
+        "type": "address",
+        "indexed": true,
+        "internalType": "address"
+      },
+      {
+        "name": "teamCount",
+        "type": "uint8",
+        "indexed": false,
+        "internalType": "uint8"
+      },
+      {
+        "name": "buyIn",
+        "type": "uint256",
+        "indexed": false,
+        "internalType": "uint256"
+      },
+      {
+        "name": "name",
+        "type": "string",
+        "indexed": false,
+        "internalType": "string"
+      },
+      {
+        "name": "espnLeagueId",
+        "type": "uint64",
+        "indexed": false,
+        "internalType": "uint64"
+      },
+      {
+        "name": "espnSeason",
+        "type": "uint16",
+        "indexed": false,
+        "internalType": "uint16"
+      },
+      {
+        "name": "sport",
+        "type": "uint8",
+        "indexed": false,
+        "internalType": "enum LeagueTreasury.Sport"
+      }
+    ],
+    "anonymous": false
+  },
+  {
+    "type": "event",
+    "name": "MemberJoined",
+    "inputs": [
+      {
+        "name": "leagueId",
+        "type": "uint256",
+        "indexed": true,
+        "internalType": "uint256"
+      },
+      {
+        "name": "member",
+        "type": "address",
+        "indexed": true,
+        "internalType": "address"
+      },
+      {
+        "name": "teamId",
+        "type": "uint32",
+        "indexed": true,
+        "internalType": "uint32"
+      }
+    ],
+    "anonymous": false
+  },
+  {
+    "type": "event",
+    "name": "PayoutClaimed",
+    "inputs": [
+      {
+        "name": "leagueId",
+        "type": "uint256",
+        "indexed": true,
+        "internalType": "uint256"
+      },
+      {
+        "name": "member",
+        "type": "address",
+        "indexed": true,
+        "internalType": "address"
+      },
+      {
+        "name": "amount",
+        "type": "uint256",
+        "indexed": false,
+        "internalType": "uint256"
+      }
+    ],
+    "anonymous": false
+  },
+  {
+    "type": "event",
+    "name": "ProposalApproved",
+    "inputs": [
+      {
+        "name": "leagueId",
+        "type": "uint256",
+        "indexed": true,
+        "internalType": "uint256"
+      },
+      {
+        "name": "proposalId",
+        "type": "uint256",
+        "indexed": true,
+        "internalType": "uint256"
+      },
+      {
+        "name": "member",
+        "type": "address",
+        "indexed": true,
+        "internalType": "address"
+      },
+      {
+        "name": "approvals",
+        "type": "uint8",
+        "indexed": false,
+        "internalType": "uint8"
+      }
+    ],
+    "anonymous": false
+  },
+  {
+    "type": "event",
+    "name": "RefundWithdrawn",
+    "inputs": [
+      {
+        "name": "leagueId",
+        "type": "uint256",
+        "indexed": true,
+        "internalType": "uint256"
+      },
+      {
+        "name": "member",
+        "type": "address",
+        "indexed": true,
+        "internalType": "address"
+      },
+      {
+        "name": "amount",
+        "type": "uint256",
+        "indexed": false,
+        "internalType": "uint256"
+      }
+    ],
+    "anonymous": false
+  },
+  {
+    "type": "event",
+    "name": "StandingsDisputed",
+    "inputs": [
+      {
+        "name": "leagueId",
+        "type": "uint256",
+        "indexed": true,
+        "internalType": "uint256"
+      },
+      {
+        "name": "member",
+        "type": "address",
+        "indexed": true,
+        "internalType": "address"
+      }
+    ],
+    "anonymous": false
+  },
+  {
+    "type": "event",
+    "name": "StandingsFinalized",
+    "inputs": [
+      {
+        "name": "leagueId",
+        "type": "uint256",
+        "indexed": true,
+        "internalType": "uint256"
+      }
+    ],
+    "anonymous": false
+  },
+  {
+    "type": "event",
+    "name": "StandingsProposed",
+    "inputs": [
+      {
+        "name": "leagueId",
+        "type": "uint256",
+        "indexed": true,
+        "internalType": "uint256"
+      },
+      {
+        "name": "proposalId",
+        "type": "uint256",
+        "indexed": true,
+        "internalType": "uint256"
+      },
+      {
+        "name": "proposer",
+        "type": "address",
+        "indexed": true,
+        "internalType": "address"
+      },
+      {
+        "name": "rankedTeamIds",
+        "type": "uint32[]",
+        "indexed": false,
+        "internalType": "uint32[]"
+      }
+    ],
+    "anonymous": false
+  },
+  {
+    "type": "event",
+    "name": "StandingsSubmitted",
+    "inputs": [
+      {
+        "name": "leagueId",
+        "type": "uint256",
+        "indexed": true,
+        "internalType": "uint256"
+      },
+      {
+        "name": "submittedAt",
+        "type": "uint64",
+        "indexed": false,
+        "internalType": "uint64"
+      }
+    ],
+    "anonymous": false
+  },
+  {
+    "type": "error",
+    "name": "LeagueTreasury__AlreadyApproved",
+    "inputs": [
+      {
+        "name": "leagueId",
+        "type": "uint256",
+        "internalType": "uint256"
+      },
+      {
+        "name": "proposalId",
+        "type": "uint256",
+        "internalType": "uint256"
+      },
+      {
+        "name": "member",
+        "type": "address",
+        "internalType": "address"
+      }
+    ]
+  },
+  {
+    "type": "error",
+    "name": "LeagueTreasury__AlreadyClaimed",
+    "inputs": [
+      {
+        "name": "leagueId",
+        "type": "uint256",
+        "internalType": "uint256"
+      },
+      {
+        "name": "member",
+        "type": "address",
+        "internalType": "address"
+      }
+    ]
+  },
+  {
+    "type": "error",
+    "name": "LeagueTreasury__ChallengeWindowClosed",
+    "inputs": [
+      {
+        "name": "leagueId",
+        "type": "uint256",
+        "internalType": "uint256"
+      },
+      {
+        "name": "closedAt",
+        "type": "uint256",
+        "internalType": "uint256"
+      }
+    ]
+  },
+  {
+    "type": "error",
+    "name": "LeagueTreasury__ChallengeWindowOpen",
+    "inputs": [
+      {
+        "name": "leagueId",
+        "type": "uint256",
+        "internalType": "uint256"
+      },
+      {
+        "name": "closesAt",
+        "type": "uint256",
+        "internalType": "uint256"
+      }
+    ]
+  },
+  {
+    "type": "error",
+    "name": "LeagueTreasury__DisputeResolutionWindowClosed",
+    "inputs": [
+      {
+        "name": "leagueId",
+        "type": "uint256",
+        "internalType": "uint256"
+      },
+      {
+        "name": "closedAt",
+        "type": "uint256",
+        "internalType": "uint256"
+      }
+    ]
+  },
+  {
+    "type": "error",
+    "name": "LeagueTreasury__DuplicateTeam",
+    "inputs": [
+      {
+        "name": "teamId",
+        "type": "uint32",
+        "internalType": "uint32"
+      }
+    ]
+  },
+  {
+    "type": "error",
+    "name": "LeagueTreasury__IncorrectBuyIn",
+    "inputs": [
+      {
+        "name": "sent",
+        "type": "uint256",
+        "internalType": "uint256"
+      },
+      {
+        "name": "required",
+        "type": "uint256",
+        "internalType": "uint256"
+      }
+    ]
+  },
+  {
+    "type": "error",
+    "name": "LeagueTreasury__InvalidBuyIn",
+    "inputs": [
+      {
+        "name": "buyIn",
+        "type": "uint256",
+        "internalType": "uint256"
+      }
+    ]
+  },
+  {
+    "type": "error",
+    "name": "LeagueTreasury__InvalidEspnLeague",
+    "inputs": [
+      {
+        "name": "espnLeagueId",
+        "type": "uint64",
+        "internalType": "uint64"
+      },
+      {
+        "name": "season",
+        "type": "uint16",
+        "internalType": "uint16"
+      }
+    ]
+  },
+  {
+    "type": "error",
+    "name": "LeagueTreasury__InvalidJoinDeadline",
+    "inputs": [
+      {
+        "name": "joinDeadline",
+        "type": "uint64",
+        "internalType": "uint64"
+      }
+    ]
+  },
+  {
+    "type": "error",
+    "name": "LeagueTreasury__InvalidName",
+    "inputs": [
+      {
+        "name": "length",
+        "type": "uint256",
+        "internalType": "uint256"
+      }
+    ]
+  },
+  {
+    "type": "error",
+    "name": "LeagueTreasury__InvalidPayoutTotal",
+    "inputs": [
+      {
+        "name": "total",
+        "type": "uint256",
+        "internalType": "uint256"
+      }
+    ]
+  },
+  {
+    "type": "error",
+    "name": "LeagueTreasury__InvalidReporter",
+    "inputs": [
+      {
+        "name": "reporter",
+        "type": "address",
+        "internalType": "address"
+      }
+    ]
+  },
+  {
+    "type": "error",
+    "name": "LeagueTreasury__InvalidStandingsDeadline",
+    "inputs": [
+      {
+        "name": "standingsDeadline",
+        "type": "uint64",
+        "internalType": "uint64"
+      },
+      {
+        "name": "joinDeadline",
+        "type": "uint64",
+        "internalType": "uint64"
+      }
+    ]
+  },
+  {
+    "type": "error",
+    "name": "LeagueTreasury__InvalidState",
+    "inputs": [
+      {
+        "name": "leagueId",
+        "type": "uint256",
+        "internalType": "uint256"
+      },
+      {
+        "name": "expected",
+        "type": "uint8",
+        "internalType": "enum LeagueTreasury.LeagueState"
+      },
+      {
+        "name": "actual",
+        "type": "uint8",
+        "internalType": "enum LeagueTreasury.LeagueState"
+      }
+    ]
+  },
+  {
+    "type": "error",
+    "name": "LeagueTreasury__InvalidTeamCount",
+    "inputs": [
+      {
+        "name": "teamCount",
+        "type": "uint8",
+        "internalType": "uint8"
+      }
+    ]
+  },
+  {
+    "type": "error",
+    "name": "LeagueTreasury__InvalidTeamId",
+    "inputs": [
+      {
+        "name": "teamId",
+        "type": "uint32",
+        "internalType": "uint32"
+      }
+    ]
+  },
+  {
+    "type": "error",
+    "name": "LeagueTreasury__JoinDeadlinePassed",
+    "inputs": [
+      {
+        "name": "leagueId",
+        "type": "uint256",
+        "internalType": "uint256"
+      },
+      {
+        "name": "joinDeadline",
+        "type": "uint64",
+        "internalType": "uint64"
+      }
+    ]
+  },
+  {
+    "type": "error",
+    "name": "LeagueTreasury__LeagueNotFound",
+    "inputs": [
+      {
+        "name": "leagueId",
+        "type": "uint256",
+        "internalType": "uint256"
+      }
+    ]
+  },
+  {
+    "type": "error",
+    "name": "LeagueTreasury__LeagueNotOpen",
+    "inputs": [
+      {
+        "name": "leagueId",
+        "type": "uint256",
+        "internalType": "uint256"
+      },
+      {
+        "name": "state",
+        "type": "uint8",
+        "internalType": "enum LeagueTreasury.LeagueState"
+      }
+    ]
+  },
+  {
+    "type": "error",
+    "name": "LeagueTreasury__MemberAlreadyJoined",
+    "inputs": [
+      {
+        "name": "leagueId",
+        "type": "uint256",
+        "internalType": "uint256"
+      },
+      {
+        "name": "member",
+        "type": "address",
+        "internalType": "address"
+      }
+    ]
+  },
+  {
+    "type": "error",
+    "name": "LeagueTreasury__NotCommissioner",
+    "inputs": [
+      {
+        "name": "caller",
+        "type": "address",
+        "internalType": "address"
+      }
+    ]
+  },
+  {
+    "type": "error",
+    "name": "LeagueTreasury__NotMember",
+    "inputs": [
+      {
+        "name": "leagueId",
+        "type": "uint256",
+        "internalType": "uint256"
+      },
+      {
+        "name": "caller",
+        "type": "address",
+        "internalType": "address"
+      }
+    ]
+  },
+  {
+    "type": "error",
+    "name": "LeagueTreasury__NotRefundable",
+    "inputs": [
+      {
+        "name": "leagueId",
+        "type": "uint256",
+        "internalType": "uint256"
+      },
+      {
+        "name": "state",
+        "type": "uint8",
+        "internalType": "enum LeagueTreasury.LeagueState"
+      }
+    ]
+  },
+  {
+    "type": "error",
+    "name": "LeagueTreasury__NotReporter",
+    "inputs": [
+      {
+        "name": "caller",
+        "type": "address",
+        "internalType": "address"
+      }
+    ]
+  },
+  {
+    "type": "error",
+    "name": "LeagueTreasury__PayoutLengthMismatch",
+    "inputs": [
+      {
+        "name": "teamCount",
+        "type": "uint8",
+        "internalType": "uint8"
+      },
+      {
+        "name": "payoutLength",
+        "type": "uint256",
+        "internalType": "uint256"
+      }
+    ]
+  },
+  {
+    "type": "error",
+    "name": "LeagueTreasury__ProposalNotFound",
+    "inputs": [
+      {
+        "name": "leagueId",
+        "type": "uint256",
+        "internalType": "uint256"
+      },
+      {
+        "name": "proposalId",
+        "type": "uint256",
+        "internalType": "uint256"
+      }
+    ]
+  },
+  {
+    "type": "error",
+    "name": "LeagueTreasury__RankingLengthMismatch",
+    "inputs": [
+      {
+        "name": "teamCount",
+        "type": "uint8",
+        "internalType": "uint8"
+      },
+      {
+        "name": "rankingLength",
+        "type": "uint256",
+        "internalType": "uint256"
+      }
+    ]
+  },
+  {
+    "type": "error",
+    "name": "LeagueTreasury__ReporterCannotPlay",
+    "inputs": [
+      {
+        "name": "reporter",
+        "type": "address",
+        "internalType": "address"
+      }
+    ]
+  },
+  {
+    "type": "error",
+    "name": "LeagueTreasury__StandingsDeadlinePassed",
+    "inputs": [
+      {
+        "name": "leagueId",
+        "type": "uint256",
+        "internalType": "uint256"
+      },
+      {
+        "name": "deadline",
+        "type": "uint64",
+        "internalType": "uint64"
+      }
+    ]
+  },
+  {
+    "type": "error",
+    "name": "LeagueTreasury__TeamAlreadyTaken",
+    "inputs": [
+      {
+        "name": "leagueId",
+        "type": "uint256",
+        "internalType": "uint256"
+      },
+      {
+        "name": "teamId",
+        "type": "uint32",
+        "internalType": "uint32"
+      }
+    ]
+  },
+  {
+    "type": "error",
+    "name": "LeagueTreasury__TransferFailed",
+    "inputs": [
+      {
+        "name": "recipient",
+        "type": "address",
+        "internalType": "address"
+      },
+      {
+        "name": "amount",
+        "type": "uint256",
+        "internalType": "uint256"
+      }
+    ]
+  }
+]

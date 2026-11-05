@@ -1,5 +1,6 @@
 import { mnemonicToAccount } from 'viem/accounts'
 import type { Address } from 'viem'
+import { isLocalChain } from './chain'
 
 /**
  * LOCAL DEVELOPMENT ONLY.
@@ -11,7 +12,8 @@ const ANVIL_MNEMONIC = 'test test test test test test test test test test test j
 export const DEV_ACCOUNT_COUNT = 20
 const STORAGE_KEY = 'commish.devAccount'
 
-export const devWalletEnabled = import.meta.env.VITE_DEV_WALLET === 'true'
+// Never on a real network: these keys are public.
+export const devWalletEnabled = import.meta.env.VITE_DEV_WALLET === 'true' && isLocalChain
 
 export const devAccounts: Address[] = devWalletEnabled
   ? Array.from({ length: DEV_ACCOUNT_COUNT }, (_, i) => mnemonicToAccount(ANVIL_MNEMONIC, { addressIndex: i }).address)

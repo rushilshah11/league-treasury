@@ -1,6 +1,7 @@
 import { useQuery } from '@tanstack/react-query'
 import { usePublicClient, useReadContract } from 'wagmi'
 import { leagueTreasury } from '@/config/contracts'
+import { scanEvents } from '@/lib/logs'
 import { SPORTS } from '@/lib/espn'
 import type { League, LeagueState } from '@/lib/league'
 
@@ -30,12 +31,9 @@ export function useLeague(leagueId: bigint | undefined) {
     queryKey: ['LeagueCreated', leagueId?.toString()],
     enabled: enabled && !!client,
     queryFn: async () => {
-      const [log] = await client!.getContractEvents({
-        ...leagueTreasury,
-        eventName: 'LeagueCreated',
-        args: { leagueId },
-        fromBlock: 0n,
-      })
+      const [log] = await scanEvents(client!, (range) =>
+        client!.getContractEvents({ ...leagueTreasury, eventName: 'LeagueCreated', args: { leagueId }, ...range }),
+      )
       return log?.args ?? null
     },
   })
