@@ -1,0 +1,11 @@
+{
+  "$schema": "https://openapi.vercel.sh/vercel.json",
+  "framework": "vite",
+  "rewrites": [
+    {
+      "source": "/api/espn/:sport/:season/:leagueId",
+      "destination": "/api/espn?sport=:sport&season=:season&leagueId=:leagueId"
+    },
+    { "source": "/((?!api/).*)", "destination": "/index.html" }
+  ]
+}

@@ -38,9 +38,12 @@ The app reads standings from ESPN for leagues that are **viewable to the public*
 `scripts/report.mjs` posts a league's final ESPN standings on-chain as its reporter. It always fetches fresh from ESPN, never the cache.
 
 ```bash
-make report LEAGUE=0          # posts only once ESPN marks the season final
+make report                   # every league the bot reports for
+make report LEAGUE=0          # one league; posts only once ESPN marks the season final
 make report LEAGUE=0 TEST=1   # posts the current standings now, for testing
 ```
+
+Deployed, GitHub Actions runs it daily (`.github/workflows/standings-bot.yml`). See `DEPLOY.md` in the repo root.
 
 Locally it signs as Anvil account 19, the reporter the create form suggests in dev wallet mode. On any other network it requires `REPORTER_PRIVATE_KEY` and won't use Anvil's public keys.
 
@@ -57,6 +60,7 @@ src/
   lib/                 league rules mirrored from the contract, payouts, formatting, error messages
   config/              contract address, wagmi config, dev wallet
 server/                ESPN fetch + cache, served by the dev server
+api/                   the same ESPN endpoint as a Vercel Function (vercel.json routes to it)
 scripts/               sync-abi, standings bot
   pages/               one file per route
 ```

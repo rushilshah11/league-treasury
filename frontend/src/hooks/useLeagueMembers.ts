@@ -2,6 +2,7 @@ import { useQuery } from '@tanstack/react-query'
 import { usePublicClient, useReadContracts } from 'wagmi'
 import type { Address } from 'viem'
 import { leagueTreasury } from '@/config/contracts'
+import { scanEvents } from '@/lib/logs'
 import type { Member } from '@/lib/league'
 
 /**
@@ -15,12 +16,9 @@ export function useLeagueMembers(leagueId: bigint | undefined) {
     queryKey: ['MemberJoined', leagueId?.toString()],
     enabled: leagueId !== undefined && !!client,
     queryFn: async () => {
-      const logs = await client!.getContractEvents({
-        ...leagueTreasury,
-        eventName: 'MemberJoined',
-        args: { leagueId },
-        fromBlock: 0n,
-      })
+      const logs = await scanEvents(client!, (range) =>
+        client!.getContractEvents({ ...leagueTreasury, eventName: 'MemberJoined', args: { leagueId }, ...range }),
+      )
       return logs.map((log) => log.args.member as Address)
     },
   })
