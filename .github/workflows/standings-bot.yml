@@ -38,6 +38,5 @@ jobs:
         env:
           CHAIN: sepolia
           TREASURY_ADDRESS: ${{ vars.TREASURY_ADDRESS }}
-          DEPLOY_BLOCK: ${{ vars.DEPLOY_BLOCK }}
           RPC_URL: ${{ secrets.SEPOLIA_RPC_URL }}
           REPORTER_PRIVATE_KEY: ${{ secrets.REPORTER_PRIVATE_KEY }}
