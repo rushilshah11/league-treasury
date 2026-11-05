@@ -1,46 +1,23 @@
-import { useQuery } from '@tanstack/react-query'
-import { usePublicClient, useReadContract } from 'wagmi'
+import { useReadContract } from 'wagmi'
 import { leagueTreasury } from '@/config/contracts'
-import { scanEvents } from '@/lib/logs'
 import { SPORTS } from '@/lib/espn'
 import type { League, LeagueState } from '@/lib/league'
 
-/**
- * Everything about one league: its stored fields, plus the name and ESPN id,
- * which only live in the LeagueCreated event (cheaper than storage).
- */
+/** Everything about one league, read straight from contract storage. */
 export function useLeague(leagueId: bigint | undefined) {
-  const client = usePublicClient()
   const enabled = leagueId !== undefined
+  const args = enabled ? ([leagueId] as const) : undefined
 
-  const stored = useReadContract({
-    ...leagueTreasury,
-    functionName: 'leagues',
-    args: enabled ? [leagueId] : undefined,
-    query: { enabled },
-  })
+  // League IDs count up from 0, so any ID below nextLeagueId exists.
+  const count = useReadContract({ ...leagueTreasury, functionName: 'nextLeagueId' })
+  const exists = enabled && count.data !== undefined && leagueId < count.data
 
-  const payout = useReadContract({
-    ...leagueTreasury,
-    functionName: 'getPayoutBps',
-    args: enabled ? [leagueId] : undefined,
-    query: { enabled },
-  })
+  const stored = useReadContract({ ...leagueTreasury, functionName: 'leagues', args, query: { enabled: exists } })
+  const info = useReadContract({ ...leagueTreasury, functionName: 'getLeagueInfo', args, query: { enabled: exists } })
+  const payout = useReadContract({ ...leagueTreasury, functionName: 'getPayoutBps', args, query: { enabled: exists } })
 
-  const created = useQuery({
-    queryKey: ['LeagueCreated', leagueId?.toString()],
-    enabled: enabled && !!client,
-    queryFn: async () => {
-      const [log] = await scanEvents(client!, (range) =>
-        client!.getContractEvents({ ...leagueTreasury, eventName: 'LeagueCreated', args: { leagueId }, ...range }),
-      )
-      return log?.args ?? null
-    },
-  })
-
-  const exists = created.data !== null && created.data !== undefined
   let league: League | undefined
-  if (enabled && stored.data && exists) {
+  if (exists && stored.data && info.data) {
     const [
       commissioner,
       joinDeadline,
@@ -53,13 +30,14 @@ export function useLeague(leagueId: bigint | undefined) {
       standingsSubmittedAt,
       disputedAt,
     ] = stored.data
+    const [name, espn] = info.data
     league = {
       id: leagueId,
-      name: created.data?.name ?? '',
+      name,
       espn: {
-        leagueId: Number(created.data?.espnLeagueId ?? 0n),
-        season: created.data?.espnSeason ?? 0,
-        sport: SPORTS[created.data?.sport ?? 1]?.code ?? 'fba',
+        leagueId: Number(espn.leagueId),
+        season: espn.season,
+        sport: SPORTS[espn.sport]?.code ?? 'fba',
       },
       commissioner,
       reporter,
@@ -77,8 +55,8 @@ export function useLeague(leagueId: bigint | undefined) {
   return {
     league,
     payoutBps: payout.data?.map(Number),
-    isLoading: stored.isLoading || created.isLoading,
-    notFound: enabled && created.isSuccess && !exists,
-    error: stored.error ?? created.error,
+    isLoading: count.isLoading || stored.isLoading || info.isLoading,
+    notFound: enabled && count.data !== undefined && !exists,
+    error: count.error ?? stored.error ?? info.error,
   }
 }

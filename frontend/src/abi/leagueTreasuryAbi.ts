@@ -201,6 +201,112 @@ export const leagueTreasuryAbi = [
   },
   {
     "type": "function",
+    "name": "getLeagueInfo",
+    "inputs": [
+      {
+        "name": "leagueId",
+        "type": "uint256",
+        "internalType": "uint256"
+      }
+    ],
+    "outputs": [
+      {
+        "name": "name",
+        "type": "string",
+        "internalType": "string"
+      },
+      {
+        "name": "espn",
+        "type": "tuple",
+        "internalType": "struct LeagueTreasury.EspnLink",
+        "components": [
+          {
+            "name": "leagueId",
+            "type": "uint64",
+            "internalType": "uint64"
+          },
+          {
+            "name": "season",
+            "type": "uint16",
+            "internalType": "uint16"
+          },
+          {
+            "name": "sport",
+            "type": "uint8",
+            "internalType": "enum LeagueTreasury.Sport"
+          }
+        ]
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
+    "name": "getLeaguesOf",
+    "inputs": [
+      {
+        "name": "wallet",
+        "type": "address",
+        "internalType": "address"
+      }
+    ],
+    "outputs": [
+      {
+        "name": "",
+        "type": "uint256[]",
+        "internalType": "uint256[]"
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
+    "name": "getMembers",
+    "inputs": [
+      {
+        "name": "leagueId",
+        "type": "uint256",
+        "internalType": "uint256"
+      }
+    ],
+    "outputs": [
+      {
+        "name": "addresses",
+        "type": "address[]",
+        "internalType": "address[]"
+      },
+      {
+        "name": "records",
+        "type": "tuple[]",
+        "internalType": "struct LeagueTreasury.Member[]",
+        "components": [
+          {
+            "name": "teamId",
+            "type": "uint32",
+            "internalType": "uint32"
+          },
+          {
+            "name": "joined",
+            "type": "bool",
+            "internalType": "bool"
+          },
+          {
+            "name": "claimed",
+            "type": "bool",
+            "internalType": "bool"
+          },
+          {
+            "name": "finalPlace",
+            "type": "uint8",
+            "internalType": "uint8"
+          }
+        ]
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
     "name": "getPayout",
     "inputs": [
       {

@@ -25,12 +25,10 @@ if (!create || !receipt) {
 }
 
 const address = create.contractAddress
-const block = Number(BigInt(receipt.blockNumber))
-console.log(`LeagueTreasury: https://sepolia.etherscan.io/address/${address}\n`)
-console.log('Frontend (frontend/.env.production and Netlify environment variables):')
+console.log(`LeagueTreasury: https://sepolia.etherscan.io/address/${address}`)
+console.log(`Deployed in block ${Number(BigInt(receipt.blockNumber))}\n`)
+console.log('Vercel environment variables:')
 console.log(`  VITE_CHAIN=sepolia`)
 console.log(`  VITE_TREASURY_ADDRESS=${address}`)
-console.log(`  VITE_DEPLOY_BLOCK=${block}`)
-console.log('\nStandings bot (GitHub repo variables):')
+console.log('\nStandings bot (GitHub repo variable):')
 console.log(`  TREASURY_ADDRESS=${address}`)
-console.log(`  DEPLOY_BLOCK=${block}`)

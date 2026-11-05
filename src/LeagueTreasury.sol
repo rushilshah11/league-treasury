@@ -109,6 +109,13 @@ contract LeagueTreasury {
     mapping(uint256 => mapping(address => Member)) public members;
     mapping(uint256 => mapping(uint32 => address)) public teamOwners;
 
+    // Kept in storage (not only in events) so apps can read them with a plain call.
+    // Reading events means searching chain history, which free RPC plans limit heavily.
+    mapping(uint256 => string) internal leagueNames;
+    mapping(uint256 => EspnLink) internal espnLinks;
+    mapping(uint256 => address[]) internal leagueMembers; // in join order
+    mapping(address => uint256[]) internal leaguesOf; // every league a wallet has joined
+
     // Dispute votes, per league: proposals[leagueId][proposalId]
     mapping(uint256 => uint256) public proposalCount;
     mapping(uint256 => mapping(uint256 => Proposal)) public proposals;
@@ -195,12 +202,14 @@ contract LeagueTreasury {
         }
         _validateLeague(name, reporter, buyIn, teamCount, joinDeadline, standingsDeadline, payout);
         leagueId = _storeLeague(reporter, buyIn, teamCount, joinDeadline, standingsDeadline, payout);
-        _emitLeagueCreated(leagueId, name, espn);
+        _recordLeagueInfo(leagueId, name, espn);
         // The commissioner plays in their own league: they pay the buy-in and take the first team.
         _join(leagueId, commissionerTeamId);
     }
 
-    function _emitLeagueCreated(uint256 leagueId, string calldata name, EspnLink calldata espn) internal {
+    function _recordLeagueInfo(uint256 leagueId, string calldata name, EspnLink calldata espn) internal {
+        leagueNames[leagueId] = name;
+        espnLinks[leagueId] = espn;
         League storage league = leagues[leagueId];
         emit LeagueCreated(
             leagueId,
@@ -317,6 +326,8 @@ contract LeagueTreasury {
         member.teamId = teamId;
         member.joined = true;
         teamOwners[leagueId][teamId] = msg.sender;
+        leagueMembers[leagueId].push(msg.sender);
+        leaguesOf[msg.sender].push(leagueId);
         league.memberCount++;
 
         if (league.memberCount == league.teamCount) {
@@ -568,6 +579,35 @@ contract LeagueTreasury {
     /*//////////////////////////////////////////////////////////////
                              VIEW FUNCTIONS
     //////////////////////////////////////////////////////////////*/
+
+    /// @notice A league's name and the ESPN league it follows.
+    function getLeagueInfo(uint256 leagueId)
+        external
+        view
+        leagueExists(leagueId)
+        returns (string memory name, EspnLink memory espn)
+    {
+        return (leagueNames[leagueId], espnLinks[leagueId]);
+    }
+
+    /// @notice Every member of a league, in join order, with their records.
+    function getMembers(uint256 leagueId)
+        external
+        view
+        leagueExists(leagueId)
+        returns (address[] memory addresses, Member[] memory records)
+    {
+        addresses = leagueMembers[leagueId];
+        records = new Member[](addresses.length);
+        for (uint256 i = 0; i < addresses.length; i++) {
+            records[i] = members[leagueId][addresses[i]];
+        }
+    }
+
+    /// @notice IDs of every league a wallet has joined (commissioners join their own league).
+    function getLeaguesOf(address wallet) external view returns (uint256[] memory) {
+        return leaguesOf[wallet];
+    }
 
     function getPayoutBps(uint256 leagueId) external view leagueExists(leagueId) returns (uint16[] memory) {
         return payoutBps[leagueId];
