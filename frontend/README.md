@@ -45,7 +45,7 @@ make report LEAGUE=0 TEST=1   # posts the current standings now, for testing
 
 Deployed, GitHub Actions runs it daily (`.github/workflows/standings-bot.yml`). See `DEPLOY.md` in the repo root.
 
-Locally it signs as Anvil account 19, the reporter the create form suggests in dev wallet mode. On any other network it requires `REPORTER_PRIVATE_KEY` and won't use Anvil's public keys.
+Locally it signs as Anvil account 19, the app's default reporter. On any other network it requires `REPORTER_PRIVATE_KEY` and won't use Anvil's public keys.
 
 ## Layout
 
@@ -58,11 +58,12 @@ src/
   components/create/   create-league form
   hooks/               chain reads (useLeague, useLeagueMembers, useMyLeagues), useTx, useChainNow
   lib/                 league rules mirrored from the contract, payouts, formatting, error messages
-  config/              contract address, wagmi config, dev wallet
+  config/              chain, contract address, reporter, wagmi config, dev wallet
+  pages/               one file per route
+public/demo/           the landing page's walkthrough video and poster
 server/                ESPN fetch + cache, served by the dev server
 api/                   the same ESPN endpoint as a Vercel Function (vercel.json routes to it)
-scripts/               sync-abi, standings bot
-  pages/               one file per route
+scripts/               sync-abi, deployment-info, standings bot
 ```
 
 `LeagueActions` decides which action card to show from the league's state, the chain time and your role, mirroring the contract so buttons only appear when the transaction would succeed.
