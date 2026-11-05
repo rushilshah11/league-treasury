@@ -40,8 +40,8 @@ export function MyLeagues() {
             </TableRow>
           </TableHeader>
           <TableBody>
-            {leagues.map((entry) => (
-              <LeagueRow key={entry.id.toString()} entry={entry} />
+            {leagues.map((id) => (
+              <LeagueRow key={id.toString()} leagueId={id} me={address} />
             ))}
           </TableBody>
         </Table>

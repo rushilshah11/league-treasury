@@ -2033,4 +2033,67 @@ contract LeagueTreasuryTest is Test {
         (bool ok,) = address(leagueTreasury).call{value: BUY_IN}(data);
         assertFalse(ok);
     }
+
+    /*//////////////////////////////////////////////////////////////
+                  league info, members and leagues per wallet
+    //////////////////////////////////////////////////////////////*/
+
+    function test_GetLeagueInfo_ReturnsNameAndEspnLink() public {
+        uint256 leagueId = _createLeague();
+        (string memory name, LeagueTreasury.EspnLink memory espn) = leagueTreasury.getLeagueInfo(leagueId);
+
+        assertEq(name, LEAGUE_NAME);
+        assertEq(espn.leagueId, ESPN_LEAGUE_ID);
+        assertEq(espn.season, ESPN_SEASON);
+        assertEq(uint8(espn.sport), uint8(LeagueTreasury.Sport.BASKETBALL));
+    }
+
+    function test_RevertWhen_GettingInfoForMissingLeague() public {
+        vm.expectRevert(abi.encodeWithSelector(LeagueTreasury.LeagueTreasury__LeagueNotFound.selector, 0));
+        leagueTreasury.getLeagueInfo(0);
+    }
+
+    function test_GetMembers_ListsMembersInJoinOrder() public {
+        uint256 leagueId = _createLeague();
+        _join(alice, leagueId, 2);
+        _join(bob, leagueId, 3);
+
+        (address[] memory addresses, LeagueTreasury.Member[] memory records) = leagueTreasury.getMembers(leagueId);
+        assertEq(addresses.length, 3);
+        assertEq(addresses[0], commissioner);
+        assertEq(addresses[1], alice);
+        assertEq(addresses[2], bob);
+        assertEq(records[0].teamId, COMMISSIONER_TEAM);
+        assertEq(records[2].teamId, 3);
+        assertTrue(records[1].joined);
+    }
+
+    function test_GetMembers_ReflectsPlacesAndClaims() public {
+        uint256 leagueId = _finalizedLeague();
+        _claim(_member(3), leagueId);
+
+        (address[] memory addresses, LeagueTreasury.Member[] memory records) = leagueTreasury.getMembers(leagueId);
+        assertEq(addresses.length, TEAM_COUNT);
+        for (uint256 i = 0; i < addresses.length; i++) {
+            assertEq(records[i].finalPlace, records[i].teamId); // team i finished in place i
+            assertEq(records[i].claimed, addresses[i] == _member(3));
+        }
+    }
+
+    function test_GetLeaguesOf_TracksEachWallet() public {
+        uint256 first = _createLeague();
+        uint256 second = _createLeague();
+        _join(alice, second, 2);
+
+        uint256[] memory commissionerLeagues = leagueTreasury.getLeaguesOf(commissioner);
+        assertEq(commissionerLeagues.length, 2);
+        assertEq(commissionerLeagues[0], first);
+        assertEq(commissionerLeagues[1], second);
+
+        uint256[] memory aliceLeagues = leagueTreasury.getLeaguesOf(alice);
+        assertEq(aliceLeagues.length, 1);
+        assertEq(aliceLeagues[0], second);
+
+        assertEq(leagueTreasury.getLeaguesOf(bob).length, 0);
+    }
 }
