@@ -55,6 +55,24 @@ export const leagueTreasuryAbi = [
   },
   {
     "type": "function",
+    "name": "approveProposal",
+    "inputs": [
+      {
+        "name": "leagueId",
+        "type": "uint256",
+        "internalType": "uint256"
+      },
+      {
+        "name": "proposalId",
+        "type": "uint256",
+        "internalType": "uint256"
+      }
+    ],
+    "outputs": [],
+    "stateMutability": "nonpayable"
+  },
+  {
+    "type": "function",
     "name": "cancelLeague",
     "inputs": [
       {
@@ -89,9 +107,26 @@ export const leagueTreasuryAbi = [
         "internalType": "string"
       },
       {
-        "name": "espnLeagueId",
-        "type": "uint64",
-        "internalType": "uint64"
+        "name": "espn",
+        "type": "tuple",
+        "internalType": "struct LeagueTreasury.EspnLink",
+        "components": [
+          {
+            "name": "leagueId",
+            "type": "uint64",
+            "internalType": "uint64"
+          },
+          {
+            "name": "season",
+            "type": "uint16",
+            "internalType": "uint16"
+          },
+          {
+            "name": "sport",
+            "type": "uint8",
+            "internalType": "enum LeagueTreasury.Sport"
+          }
+        ]
       },
       {
         "name": "reporter",
@@ -122,6 +157,11 @@ export const leagueTreasuryAbi = [
         "name": "payout",
         "type": "uint16[]",
         "internalType": "uint16[]"
+      },
+      {
+        "name": "commissionerTeamId",
+        "type": "uint32",
+        "internalType": "uint32"
       }
     ],
     "outputs": [
@@ -131,7 +171,7 @@ export const leagueTreasuryAbi = [
         "internalType": "uint256"
       }
     ],
-    "stateMutability": "nonpayable"
+    "stateMutability": "payable"
   },
   {
     "type": "function",
@@ -198,6 +238,69 @@ export const leagueTreasuryAbi = [
         "name": "",
         "type": "uint16[]",
         "internalType": "uint16[]"
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
+    "name": "getProposal",
+    "inputs": [
+      {
+        "name": "leagueId",
+        "type": "uint256",
+        "internalType": "uint256"
+      },
+      {
+        "name": "proposalId",
+        "type": "uint256",
+        "internalType": "uint256"
+      }
+    ],
+    "outputs": [
+      {
+        "name": "proposer",
+        "type": "address",
+        "internalType": "address"
+      },
+      {
+        "name": "approvals",
+        "type": "uint8",
+        "internalType": "uint8"
+      },
+      {
+        "name": "rankedTeamIds",
+        "type": "uint32[]",
+        "internalType": "uint32[]"
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
+    "name": "hasApproved",
+    "inputs": [
+      {
+        "name": "",
+        "type": "uint256",
+        "internalType": "uint256"
+      },
+      {
+        "name": "",
+        "type": "uint256",
+        "internalType": "uint256"
+      },
+      {
+        "name": "",
+        "type": "address",
+        "internalType": "address"
+      }
+    ],
+    "outputs": [
+      {
+        "name": "",
+        "type": "bool",
+        "internalType": "bool"
       }
     ],
     "stateMutability": "view"
@@ -381,7 +484,55 @@ export const leagueTreasuryAbi = [
   },
   {
     "type": "function",
-    "name": "resolveDispute",
+    "name": "proposalCount",
+    "inputs": [
+      {
+        "name": "",
+        "type": "uint256",
+        "internalType": "uint256"
+      }
+    ],
+    "outputs": [
+      {
+        "name": "",
+        "type": "uint256",
+        "internalType": "uint256"
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
+    "name": "proposals",
+    "inputs": [
+      {
+        "name": "",
+        "type": "uint256",
+        "internalType": "uint256"
+      },
+      {
+        "name": "",
+        "type": "uint256",
+        "internalType": "uint256"
+      }
+    ],
+    "outputs": [
+      {
+        "name": "proposer",
+        "type": "address",
+        "internalType": "address"
+      },
+      {
+        "name": "approvals",
+        "type": "uint8",
+        "internalType": "uint8"
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
+    "name": "proposeStandings",
     "inputs": [
       {
         "name": "leagueId",
@@ -389,12 +540,18 @@ export const leagueTreasuryAbi = [
         "internalType": "uint256"
       },
       {
-        "name": "correctedRanking",
+        "name": "rankedTeamIds",
         "type": "uint32[]",
         "internalType": "uint32[]"
       }
     ],
-    "outputs": [],
+    "outputs": [
+      {
+        "name": "proposalId",
+        "type": "uint256",
+        "internalType": "uint256"
+      }
+    ],
     "stateMutability": "nonpayable"
   },
   {
@@ -458,6 +615,12 @@ export const leagueTreasuryAbi = [
     "inputs": [
       {
         "name": "leagueId",
+        "type": "uint256",
+        "indexed": true,
+        "internalType": "uint256"
+      },
+      {
+        "name": "proposalId",
         "type": "uint256",
         "indexed": true,
         "internalType": "uint256"
@@ -536,6 +699,18 @@ export const leagueTreasuryAbi = [
         "type": "uint64",
         "indexed": false,
         "internalType": "uint64"
+      },
+      {
+        "name": "espnSeason",
+        "type": "uint16",
+        "indexed": false,
+        "internalType": "uint16"
+      },
+      {
+        "name": "sport",
+        "type": "uint8",
+        "indexed": false,
+        "internalType": "enum LeagueTreasury.Sport"
       }
     ],
     "anonymous": false
@@ -586,6 +761,37 @@ export const leagueTreasuryAbi = [
         "type": "uint256",
         "indexed": false,
         "internalType": "uint256"
+      }
+    ],
+    "anonymous": false
+  },
+  {
+    "type": "event",
+    "name": "ProposalApproved",
+    "inputs": [
+      {
+        "name": "leagueId",
+        "type": "uint256",
+        "indexed": true,
+        "internalType": "uint256"
+      },
+      {
+        "name": "proposalId",
+        "type": "uint256",
+        "indexed": true,
+        "internalType": "uint256"
+      },
+      {
+        "name": "member",
+        "type": "address",
+        "indexed": true,
+        "internalType": "address"
+      },
+      {
+        "name": "approvals",
+        "type": "uint8",
+        "indexed": false,
+        "internalType": "uint8"
       }
     ],
     "anonymous": false
@@ -649,6 +855,37 @@ export const leagueTreasuryAbi = [
   },
   {
     "type": "event",
+    "name": "StandingsProposed",
+    "inputs": [
+      {
+        "name": "leagueId",
+        "type": "uint256",
+        "indexed": true,
+        "internalType": "uint256"
+      },
+      {
+        "name": "proposalId",
+        "type": "uint256",
+        "indexed": true,
+        "internalType": "uint256"
+      },
+      {
+        "name": "proposer",
+        "type": "address",
+        "indexed": true,
+        "internalType": "address"
+      },
+      {
+        "name": "rankedTeamIds",
+        "type": "uint32[]",
+        "indexed": false,
+        "internalType": "uint32[]"
+      }
+    ],
+    "anonymous": false
+  },
+  {
+    "type": "event",
     "name": "StandingsSubmitted",
     "inputs": [
       {
@@ -665,6 +902,27 @@ export const leagueTreasuryAbi = [
       }
     ],
     "anonymous": false
+  },
+  {
+    "type": "error",
+    "name": "LeagueTreasury__AlreadyApproved",
+    "inputs": [
+      {
+        "name": "leagueId",
+        "type": "uint256",
+        "internalType": "uint256"
+      },
+      {
+        "name": "proposalId",
+        "type": "uint256",
+        "internalType": "uint256"
+      },
+      {
+        "name": "member",
+        "type": "address",
+        "internalType": "address"
+      }
+    ]
   },
   {
     "type": "error",
@@ -765,6 +1023,22 @@ export const leagueTreasuryAbi = [
         "name": "buyIn",
         "type": "uint256",
         "internalType": "uint256"
+      }
+    ]
+  },
+  {
+    "type": "error",
+    "name": "LeagueTreasury__InvalidEspnLeague",
+    "inputs": [
+      {
+        "name": "espnLeagueId",
+        "type": "uint64",
+        "internalType": "uint64"
+      },
+      {
+        "name": "season",
+        "type": "uint16",
+        "internalType": "uint16"
       }
     ]
   },
@@ -1002,6 +1276,22 @@ export const leagueTreasuryAbi = [
   },
   {
     "type": "error",
+    "name": "LeagueTreasury__ProposalNotFound",
+    "inputs": [
+      {
+        "name": "leagueId",
+        "type": "uint256",
+        "internalType": "uint256"
+      },
+      {
+        "name": "proposalId",
+        "type": "uint256",
+        "internalType": "uint256"
+      }
+    ]
+  },
+  {
+    "type": "error",
     "name": "LeagueTreasury__RankingLengthMismatch",
     "inputs": [
       {
@@ -1013,6 +1303,17 @@ export const leagueTreasuryAbi = [
         "name": "rankingLength",
         "type": "uint256",
         "internalType": "uint256"
+      }
+    ]
+  },
+  {
+    "type": "error",
+    "name": "LeagueTreasury__ReporterCannotPlay",
+    "inputs": [
+      {
+        "name": "reporter",
+        "type": "address",
+        "internalType": "address"
       }
     ]
   },

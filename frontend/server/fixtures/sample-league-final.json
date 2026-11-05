@@ -1,0 +1,210 @@
+{
+  "id": 584507129,
+  "seasonId": 2027,
+  "scoringPeriodId": 15,
+  "status": {
+    "currentMatchupPeriod": 3,
+    "isActive": false,
+    "latestScoringPeriod": 15
+  },
+  "settings": {
+    "name": "Sample Hoops League",
+    "size": 10,
+    "scheduleSettings": {
+      "matchupPeriodCount": 19,
+      "playoffTeamCount": 6
+    }
+  },
+  "teams": [
+    {
+      "id": 1,
+      "name": "Hardwood Hustlers",
+      "abbrev": "HWH",
+      "location": "Hardwood",
+      "nickname": "Hustlers",
+      "record": {
+        "overall": {
+          "wins": 4,
+          "losses": 1,
+          "ties": 0,
+          "pointsFor": 612.5,
+          "pointsAgainst": 0,
+          "percentage": 0.8
+        }
+      },
+      "playoffSeed": 2,
+      "rankCalculatedFinal": 2
+    },
+    {
+      "id": 2,
+      "name": "Glass Cleaners",
+      "abbrev": "GLC",
+      "location": "Glass",
+      "nickname": "Cleaners",
+      "record": {
+        "overall": {
+          "wins": 3,
+          "losses": 2,
+          "ties": 0,
+          "pointsFor": 580.0,
+          "pointsAgainst": 0,
+          "percentage": 0.6
+        }
+      },
+      "playoffSeed": 4,
+      "rankCalculatedFinal": 4
+    },
+    {
+      "id": 3,
+      "name": "Fast Breakers",
+      "abbrev": "FBK",
+      "location": "Fast",
+      "nickname": "Breakers",
+      "record": {
+        "overall": {
+          "wins": 4,
+          "losses": 1,
+          "ties": 0,
+          "pointsFor": 598.25,
+          "pointsAgainst": 0,
+          "percentage": 0.8
+        }
+      },
+      "playoffSeed": 3,
+      "rankCalculatedFinal": 3
+    },
+    {
+      "id": 4,
+      "name": "Triple Threats",
+      "abbrev": "TRT",
+      "location": "Triple",
+      "nickname": "Threats",
+      "record": {
+        "overall": {
+          "wins": 2,
+          "losses": 3,
+          "ties": 0,
+          "pointsFor": 540.0,
+          "pointsAgainst": 0,
+          "percentage": 0.4
+        }
+      },
+      "playoffSeed": 7,
+      "rankCalculatedFinal": 7
+    },
+    {
+      "id": 5,
+      "name": "Paint Patrol",
+      "abbrev": "PNT",
+      "location": "Paint",
+      "nickname": "Patrol",
+      "record": {
+        "overall": {
+          "wins": 3,
+          "losses": 2,
+          "ties": 0,
+          "pointsFor": 571.75,
+          "pointsAgainst": 0,
+          "percentage": 0.6
+        }
+      },
+      "playoffSeed": 5,
+      "rankCalculatedFinal": 5
+    },
+    {
+      "id": 6,
+      "name": "Sixth Men",
+      "abbrev": "SIX",
+      "location": "Sixth",
+      "nickname": "Men",
+      "record": {
+        "overall": {
+          "wins": 1,
+          "losses": 4,
+          "ties": 0,
+          "pointsFor": 505.5,
+          "pointsAgainst": 0,
+          "percentage": 0.2
+        }
+      },
+      "playoffSeed": 9,
+      "rankCalculatedFinal": 9
+    },
+    {
+      "id": 7,
+      "name": "Bench Mob",
+      "abbrev": "BNM",
+      "location": "Bench",
+      "nickname": "Mob",
+      "record": {
+        "overall": {
+          "wins": 2,
+          "losses": 3,
+          "ties": 0,
+          "pointsFor": 560.0,
+          "pointsAgainst": 0,
+          "percentage": 0.4
+        }
+      },
+      "playoffSeed": 6,
+      "rankCalculatedFinal": 6
+    },
+    {
+      "id": 8,
+      "name": "Full Court Press",
+      "abbrev": "FCP",
+      "location": "Full Court",
+      "nickname": "Press",
+      "record": {
+        "overall": {
+          "wins": 5,
+          "losses": 0,
+          "ties": 0,
+          "pointsFor": 650.0,
+          "pointsAgainst": 0,
+          "percentage": 1.0
+        }
+      },
+      "playoffSeed": 1,
+      "rankCalculatedFinal": 1
+    },
+    {
+      "id": 9,
+      "name": "Pick and Rollers",
+      "abbrev": "PNR",
+      "location": "Pick and",
+      "nickname": "Rollers",
+      "record": {
+        "overall": {
+          "wins": 1,
+          "losses": 4,
+          "ties": 0,
+          "pointsFor": 520.25,
+          "pointsAgainst": 0,
+          "percentage": 0.2
+        }
+      },
+      "playoffSeed": 8,
+      "rankCalculatedFinal": 8
+    },
+    {
+      "id": 10,
+      "name": "Buzzer Beaters",
+      "abbrev": "BZB",
+      "location": "Buzzer",
+      "nickname": "Beaters",
+      "record": {
+        "overall": {
+          "wins": 0,
+          "losses": 5,
+          "ties": 0,
+          "pointsFor": 480.0,
+          "pointsAgainst": 0,
+          "percentage": 0.0
+        }
+      },
+      "playoffSeed": 10,
+      "rankCalculatedFinal": 10
+    }
+  ]
+}

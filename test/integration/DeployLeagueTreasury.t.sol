@@ -35,21 +35,21 @@ contract DeployLeagueTreasuryTest is Test {
         payout[0] = 6000;
         payout[1] = 4000;
 
+        vm.deal(commissioner, 1 ether);
         vm.prank(commissioner);
-        uint256 leagueId = leagueTreasury.createLeague(
+        uint256 leagueId = leagueTreasury.createLeague{value: BUY_IN}(
             "Integration League",
-            ESPN_LEAGUE_ID,
+            LeagueTreasury.EspnLink(ESPN_LEAGUE_ID, 2027, LeagueTreasury.Sport.BASKETBALL),
             reporter,
             BUY_IN,
             TEAM_COUNT,
             uint64(block.timestamp + 1 days),
             uint64(block.timestamp + 2 days),
-            payout
+            payout,
+            1 // the commissioner takes team 1
         );
 
         vm.prank(alice);
-        leagueTreasury.joinLeague{value: BUY_IN}(leagueId, 1);
-        vm.prank(bob);
         leagueTreasury.joinLeague{value: BUY_IN}(leagueId, 2);
 
         (,,, uint8 memberCount, LeagueTreasury.LeagueState state,,,,,) = leagueTreasury.leagues(leagueId);

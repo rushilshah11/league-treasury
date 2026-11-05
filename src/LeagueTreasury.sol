@@ -34,10 +34,29 @@ contract LeagueTreasury {
     error LeagueTreasury__TransferFailed(address recipient, uint256 amount);
     error LeagueTreasury__NotRefundable(uint256 leagueId, LeagueState state);
     error LeagueTreasury__DisputeResolutionWindowClosed(uint256 leagueId, uint256 closedAt);
+    error LeagueTreasury__ReporterCannotPlay(address reporter);
+    error LeagueTreasury__InvalidEspnLeague(uint64 espnLeagueId, uint16 season);
+    error LeagueTreasury__ProposalNotFound(uint256 leagueId, uint256 proposalId);
+    error LeagueTreasury__AlreadyApproved(uint256 leagueId, uint256 proposalId, address member);
 
     /*//////////////////////////////////////////////////////////////
                            TYPE DECLARATIONS
     //////////////////////////////////////////////////////////////*/
+
+    /// @dev ESPN fantasy sports. The order is part of the ABI: only ever append.
+    enum Sport {
+        FOOTBALL,
+        BASKETBALL,
+        BASEBALL,
+        HOCKEY
+    }
+
+    /// @notice Which ESPN league a league follows. Needed to fetch its standings.
+    struct EspnLink {
+        uint64 leagueId;
+        uint16 season; // ESPN's season ID, e.g. 2027 for the 2026-27 basketball season
+        Sport sport;
+    }
 
     enum LeagueState {
         OPEN,
@@ -69,6 +88,12 @@ contract LeagueTreasury {
         uint8 finalPlace;
     }
 
+    // Corrected standings proposed by a member during a dispute. Packs into 1 slot.
+    struct Proposal {
+        address proposer;
+        uint8 approvals;
+    }
+
     /*//////////////////////////////////////////////////////////////
                             STATE VARIABLES
     //////////////////////////////////////////////////////////////*/
@@ -84,12 +109,18 @@ contract LeagueTreasury {
     mapping(uint256 => mapping(address => Member)) public members;
     mapping(uint256 => mapping(uint32 => address)) public teamOwners;
 
+    // Dispute votes, per league: proposals[leagueId][proposalId]
+    mapping(uint256 => uint256) public proposalCount;
+    mapping(uint256 => mapping(uint256 => Proposal)) public proposals;
+    mapping(uint256 => mapping(uint256 => uint32[])) internal proposalRankings;
+    mapping(uint256 => mapping(uint256 => mapping(address => bool))) public hasApproved;
+
     /*//////////////////////////////////////////////////////////////
                                  EVENTS
     //////////////////////////////////////////////////////////////*/
 
-    /// @dev `name` and `espnLeagueId` are only emitted, never stored: the frontend
-    /// reads them from this event, which costs far less gas than storage.
+    /// @dev `name` and the ESPN league are only emitted, never stored: the frontend
+    /// and the standings bot read them from this event, which costs far less gas than storage.
     event LeagueCreated(
         uint256 indexed leagueId,
         address indexed commissioner,
@@ -97,14 +128,22 @@ contract LeagueTreasury {
         uint8 teamCount,
         uint256 buyIn,
         string name,
-        uint64 espnLeagueId
+        uint64 espnLeagueId,
+        uint16 espnSeason,
+        Sport sport
     );
     event MemberJoined(uint256 indexed leagueId, address indexed member, uint32 indexed teamId);
     event LeagueActivated(uint256 indexed leagueId);
     event StandingsSubmitted(uint256 indexed leagueId, uint64 submittedAt);
     event StandingsDisputed(uint256 indexed leagueId, address indexed member);
     event StandingsFinalized(uint256 indexed leagueId);
-    event DisputeResolved(uint256 indexed leagueId);
+    event StandingsProposed(
+        uint256 indexed leagueId, uint256 indexed proposalId, address indexed proposer, uint32[] rankedTeamIds
+    );
+    event ProposalApproved(
+        uint256 indexed leagueId, uint256 indexed proposalId, address indexed member, uint8 approvals
+    );
+    event DisputeResolved(uint256 indexed leagueId, uint256 indexed proposalId);
     event PayoutClaimed(uint256 indexed leagueId, address indexed member, uint256 amount);
     event LeagueCancelled(uint256 indexed leagueId);
     event RefundWithdrawn(uint256 indexed leagueId, address indexed member, uint256 amount);
@@ -140,25 +179,39 @@ contract LeagueTreasury {
 
     function createLeague(
         string calldata name,
-        uint64 espnLeagueId,
+        EspnLink calldata espn,
         address reporter,
         uint256 buyIn,
         uint8 teamCount,
         uint64 joinDeadline,
         uint64 standingsDeadline,
-        uint16[] calldata payout
-    ) external returns (uint256 leagueId) {
+        uint16[] calldata payout,
+        uint32 commissionerTeamId
+    ) external payable returns (uint256 leagueId) {
         // Validation, storage and the event live in internal helpers. Doing it all
         // inline needs more variables than the EVM's stack allows ("stack too deep").
+        if (espn.leagueId == 0 || espn.season == 0) {
+            revert LeagueTreasury__InvalidEspnLeague(espn.leagueId, espn.season);
+        }
         _validateLeague(name, reporter, buyIn, teamCount, joinDeadline, standingsDeadline, payout);
         leagueId = _storeLeague(reporter, buyIn, teamCount, joinDeadline, standingsDeadline, payout);
-        _emitLeagueCreated(leagueId, name, espnLeagueId);
+        _emitLeagueCreated(leagueId, name, espn);
+        // The commissioner plays in their own league: they pay the buy-in and take the first team.
+        _join(leagueId, commissionerTeamId);
     }
 
-    function _emitLeagueCreated(uint256 leagueId, string calldata name, uint64 espnLeagueId) internal {
+    function _emitLeagueCreated(uint256 leagueId, string calldata name, EspnLink calldata espn) internal {
         League storage league = leagues[leagueId];
         emit LeagueCreated(
-            leagueId, league.commissioner, league.reporter, league.teamCount, league.buyIn, name, espnLeagueId
+            leagueId,
+            league.commissioner,
+            league.reporter,
+            league.teamCount,
+            league.buyIn,
+            name,
+            espn.leagueId,
+            espn.season,
+            espn.sport
         );
     }
 
@@ -185,6 +238,10 @@ contract LeagueTreasury {
         }
         if (reporter == address(0)) {
             revert LeagueTreasury__InvalidReporter(reporter);
+        }
+        // The reporter posts standings, so they can't have a team in the league.
+        if (reporter == msg.sender) {
+            revert LeagueTreasury__ReporterCannotPlay(reporter);
         }
         if (joinDeadline <= block.timestamp) {
             revert LeagueTreasury__InvalidJoinDeadline(joinDeadline);
@@ -234,6 +291,15 @@ contract LeagueTreasury {
         if (block.timestamp >= league.joinDeadline) {
             revert LeagueTreasury__JoinDeadlinePassed(leagueId, league.joinDeadline);
         }
+        if (msg.sender == league.reporter) {
+            revert LeagueTreasury__ReporterCannotPlay(msg.sender);
+        }
+        _join(leagueId, teamId);
+    }
+
+    /// @dev Adds msg.sender as a member. Callers check the league is open first.
+    function _join(uint256 leagueId, uint32 teamId) internal {
+        League storage league = leagues[leagueId];
         if (teamId == 0) {
             revert LeagueTreasury__InvalidTeamId(teamId);
         }
@@ -261,7 +327,7 @@ contract LeagueTreasury {
         emit MemberJoined(leagueId, msg.sender, teamId);
     }
 
-    function _recordStandings(uint256 leagueId, uint32[] calldata rankedTeamIds) internal {
+    function _recordStandings(uint256 leagueId, uint32[] memory rankedTeamIds) internal {
         League storage league = leagues[leagueId];
 
         if (rankedTeamIds.length != league.teamCount) {
@@ -353,24 +419,85 @@ contract LeagueTreasury {
         emit StandingsFinalized(leagueId);
     }
 
-    function resolveDispute(uint256 leagueId, uint32[] calldata correctedRanking)
+    /// @notice During a dispute, any member can propose corrected standings.
+    /// The proposer's vote counts as the first approval.
+    function proposeStandings(uint256 leagueId, uint32[] calldata rankedTeamIds)
         external
         leagueExists(leagueId)
-        onlyCommissioner(leagueId)
+        returns (uint256 proposalId)
     {
+        _checkCanVote(leagueId);
+        _validateRanking(leagueId, rankedTeamIds);
+
+        proposalId = proposalCount[leagueId]++;
+        proposals[leagueId][proposalId].proposer = msg.sender;
+        proposalRankings[leagueId][proposalId] = rankedTeamIds;
+        emit StandingsProposed(leagueId, proposalId, msg.sender, rankedTeamIds);
+
+        _approve(leagueId, proposalId);
+    }
+
+    /// @notice Approve a proposal. Once more than half the members approve it,
+    /// its standings become final. Members may approve more than one proposal;
+    /// the first to reach a majority wins.
+    function approveProposal(uint256 leagueId, uint256 proposalId) external leagueExists(leagueId) {
+        _checkCanVote(leagueId);
+        if (proposalId >= proposalCount[leagueId]) {
+            revert LeagueTreasury__ProposalNotFound(leagueId, proposalId);
+        }
+        if (hasApproved[leagueId][proposalId][msg.sender]) {
+            revert LeagueTreasury__AlreadyApproved(leagueId, proposalId, msg.sender);
+        }
+        _approve(leagueId, proposalId);
+    }
+
+    /// @dev Voting is open to members while the league is disputed and the window is open.
+    function _checkCanVote(uint256 leagueId) internal view {
+        if (!members[leagueId][msg.sender].joined) {
+            revert LeagueTreasury__NotMember(leagueId, msg.sender);
+        }
         League storage league = leagues[leagueId];
         if (league.state != LeagueState.DISPUTED) {
             revert LeagueTreasury__InvalidState(leagueId, LeagueState.DISPUTED, league.state);
         }
-
         uint256 windowEnd = league.disputedAt + DISPUTE_RESOLUTION_WINDOW;
         if (block.timestamp >= windowEnd) {
             revert LeagueTreasury__DisputeResolutionWindowClosed(leagueId, windowEnd);
         }
+    }
 
-        _recordStandings(leagueId, correctedRanking);
-        league.state = LeagueState.FINALIZED;
-        emit DisputeResolved(leagueId);
+    function _approve(uint256 leagueId, uint256 proposalId) internal {
+        Proposal storage proposal = proposals[leagueId][proposalId];
+        hasApproved[leagueId][proposalId][msg.sender] = true;
+        proposal.approvals++;
+        emit ProposalApproved(leagueId, proposalId, msg.sender, proposal.approvals);
+
+        League storage league = leagues[leagueId];
+        if (uint256(proposal.approvals) * 2 > league.memberCount) {
+            _recordStandings(leagueId, proposalRankings[leagueId][proposalId]);
+            league.state = LeagueState.FINALIZED;
+            emit DisputeResolved(leagueId, proposalId);
+        }
+    }
+
+    /// @dev Checks a ranking without writing it: right length, real teams, no repeats.
+    /// O(n^2), fine for league sizes (teamCount is a uint8).
+    function _validateRanking(uint256 leagueId, uint32[] calldata rankedTeamIds) internal view {
+        League storage league = leagues[leagueId];
+        if (rankedTeamIds.length != league.teamCount) {
+            revert LeagueTreasury__RankingLengthMismatch(league.teamCount, rankedTeamIds.length);
+        }
+        for (uint256 i = 0; i < rankedTeamIds.length; i++) {
+            uint32 teamId = rankedTeamIds[i];
+            if (teamId == 0 || teamOwners[leagueId][teamId] == address(0)) {
+                revert LeagueTreasury__InvalidTeamId(teamId);
+            }
+            for (uint256 j = 0; j < i; j++) {
+                if (rankedTeamIds[j] == teamId) {
+                    revert LeagueTreasury__DuplicateTeam(teamId);
+                }
+            }
+        }
     }
 
     function claim(uint256 leagueId) external leagueExists(leagueId) {
@@ -444,6 +571,18 @@ contract LeagueTreasury {
 
     function getPayoutBps(uint256 leagueId) external view leagueExists(leagueId) returns (uint16[] memory) {
         return payoutBps[leagueId];
+    }
+
+    function getProposal(uint256 leagueId, uint256 proposalId)
+        external
+        view
+        returns (address proposer, uint8 approvals, uint32[] memory rankedTeamIds)
+    {
+        if (proposalId >= proposalCount[leagueId]) {
+            revert LeagueTreasury__ProposalNotFound(leagueId, proposalId);
+        }
+        Proposal storage proposal = proposals[leagueId][proposalId];
+        return (proposal.proposer, proposal.approvals, proposalRankings[leagueId][proposalId]);
     }
 
     function getPayout(uint256 leagueId, address member) public view returns (uint256) {

@@ -1,6 +1,6 @@
 -include .env
 
-.PHONY: all build test test-v coverage fmt snapshot anvil deploy-anvil clean abi frontend-install dev
+.PHONY: all build test test-v coverage fmt snapshot anvil deploy-anvil deploy-sepolia deployment-info clean abi frontend-install dev dev-wallet report
 
 # Anvil's default account 0. This key is public and only valid on a local Anvil chain.
 # Never use it, or any key, on a real network from this file.
@@ -30,12 +30,29 @@ fmt:
 snapshot:
 	forge snapshot
 
-# Start a local chain (run in its own terminal)
+# Start a local chain (run in its own terminal).
+# 20 funded accounts so a full 14-team league can be tested locally.
 anvil:
-	anvil
+	anvil --accounts 20
 
 deploy-anvil:
 	forge script script/DeployLeagueTreasury.s.sol --rpc-url $(ANVIL_RPC_URL) --private-key $(ANVIL_KEY) --broadcast
+
+# Deploy to Ethereum Sepolia and verify the source on Etherscan.
+# Needs SEPOLIA_RPC_URL, ETHERSCAN_API_KEY and DEPLOYER_ADDRESS in .env, and your
+# deployer imported into Foundry's encrypted keystore once:
+#   cast wallet import deployer --interactive
+# You'll be asked for the keystore password; no private key is stored in this repo.
+DEPLOYER_ACCOUNT ?= deployer
+deploy-sepolia:
+	forge script script/DeployLeagueTreasury.s.sol --rpc-url $(SEPOLIA_RPC_URL) \
+		--account $(DEPLOYER_ACCOUNT) --sender $(DEPLOYER_ADDRESS) --broadcast \
+		--verify --etherscan-api-key $(ETHERSCAN_API_KEY)
+	@cd frontend && node scripts/deployment-info.mjs 11155111
+
+# Print the contract address and deploy block for the app and the bot.
+deployment-info:
+	@cd frontend && node scripts/deployment-info.mjs 11155111
 
 clean:
 	forge clean
@@ -53,3 +70,16 @@ frontend-install:
 # Start the frontend dev server at http://localhost:5173
 dev:
 	cd frontend && npm run dev
+
+# Same as dev, but acts as an Anvil test account without MetaMask.
+# Switch accounts from the dropdown in the header, or add ?as=3 to the URL.
+# LOCAL CHAIN ONLY.
+dev-wallet:
+	cd frontend && VITE_DEV_WALLET=true npm run dev
+
+# Standings bot: post a league's final ESPN standings as its reporter.
+#   make report                   every league the bot reports for (local chain)
+#   make report LEAGUE=0          one league; posts only once ESPN marks the season final
+#   make report LEAGUE=0 TEST=1   posts current standings now (local testing)
+report:
+	cd frontend && node scripts/report.mjs $(if $(LEAGUE),$(LEAGUE),--all) $(if $(TEST),--test,)
