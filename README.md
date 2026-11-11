@@ -8,8 +8,8 @@ Fantasy league buy-ins usually sit in one person's Venmo until the season ends. 
 
 *A full season in 40 seconds: create a league from an ESPN link, managers join, live standings, final standings posted on-chain, payouts claimed.*
 
-- **Live app:** `<your Vercel URL>` (Ethereum Sepolia testnet, test ETH only)
-- **Contract:** [`0xd39e…508F` on Etherscan](https://sepolia.etherscan.io/address/0xd39e4462F49009C15702638A7fAd34BC48Fa508F#code) (verified source)
+- **Live app:** [onchaincommissioner.vercel.app](https://onchaincommissioner.vercel.app) (Base Sepolia testnet, test USDC only)
+- **Contract:** [`0x2711…d2ad` on BaseScan](https://sepolia.basescan.org/address/0x2711e4e095f4fddee31f3ae7125acc4521c6d2ad#code) (verified source). An earlier version of the contract, which took test ETH, is still on Ethereum Sepolia at [`0xd39e…508F`](https://sepolia.etherscan.io/address/0xd39e4462F49009C15702638A7fAd34BC48Fa508F#code).
 
 ## How a season works
 
@@ -43,13 +43,13 @@ ESPN fantasy API (public leagues)
         │   React app (Vite, wagmi, viem, RainbowKit, shadcn/ui)  ◀── players' wallets
         │        │
         ▼        ▼
-Standings bot ──▶ LeagueTreasury.sol (Ethereum Sepolia)
+Standings bot ──▶ LeagueTreasury.sol (Base Sepolia)
 (GitHub Actions,     buy-ins, members, standings, disputes, votes, payouts
  runs daily)
 ```
 
 - **`src/LeagueTreasury.sol`:** the contract. Leagues move through `OPEN → ACTIVE → STANDINGS_SUBMITTED → (DISPUTED →) FINALIZED`, or to `CANCELLED` with refunds. Payout tables are in basis points, and rounding dust goes to first place so payouts always add up to the pot exactly. League info and member lists live in storage, so the app and bot read them with plain calls and work on any RPC plan.
-- **`test/`:** 142 Foundry tests (unit, fuzz and integration), including fuzz tests proving payouts and refunds always sum to exactly what was paid in, plus malicious-wallet tests for reentrancy and rejected transfers.
+- **`test/`:** 142 Foundry tests (unit, fuzz, invariant and integration), including fuzz tests proving payouts and refunds always sum to exactly what was paid in, invariant tests that run random sequences of joins, standings, disputes, claims and cancellations and check the contract always holds exactly the USDC it owes (never stuck, never insolvent), plus malicious-wallet tests for reentrancy and rejected transfers. CI also runs Slither static analysis and checks the gas snapshot.
 - **`frontend/`:** the React app. Design tokens in `src/index.css`, shadcn/ui components, and one action card per thing a user can do, chosen from the league's state, the chain's clock and the viewer's role.
 - **`frontend/server/espn.mjs`:** reads ESPN and trims it to names, records and ranks. It runs inside the dev server locally and as a Vercel Function in production (`frontend/api/espn.mjs`).
 - **`frontend/scripts/report.mjs`:** the standings bot. It checks every league it reports for, skips each until ESPN marks the season final, then posts the ranking. `.github/workflows/standings-bot.yml` runs it daily.
@@ -71,13 +71,13 @@ make test        # contract tests
 make coverage    # coverage report
 ```
 
-Deploying to Sepolia and Vercel is covered step by step in [DEPLOY.md](DEPLOY.md).
+Deploying to Base Sepolia and Vercel is covered step by step in [DEPLOY.md](DEPLOY.md).
 
 ## Stack
 
 - **Contract:** Solidity 0.8, Foundry
 - **App:** React 19, TypeScript, Vite, Tailwind CSS v4, shadcn/ui (Base UI)
 - **Web3:** wagmi, viem, RainbowKit
-- **Infrastructure:** Vercel Functions, GitHub Actions, Ethereum Sepolia
+- **Infrastructure:** Vercel Functions, GitHub Actions, Base Sepolia
 
 Test network only. No real money.
