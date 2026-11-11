@@ -16,5 +16,5 @@ if (!(name in CHAINS)) throw new Error(`Unknown VITE_CHAIN "${name}". Use "anvil
 export const chain = CHAINS[name]
 export const isLocalChain = chain.id === anvil.id
 
-/** RPC endpoint. Optional: each chain has a public default, but a free Alchemy or Infura URL is more reliable. */
-export const rpcUrl = (import.meta.env.VITE_RPC_URL as string | undefined) || undefined
+/** RPC endpoint, from VITE_RPC_URL or RPC_URL. Optional: each chain has a public default, but a free Alchemy or Infura URL is more reliable. */
+export const rpcUrl = import.meta.env.VITE_RPC_URL || import.meta.env.RPC_URL || undefined

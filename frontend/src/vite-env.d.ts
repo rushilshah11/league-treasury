@@ -7,4 +7,5 @@ interface ImportMetaEnv {
   readonly VITE_DEV_WALLET?: string
   readonly VITE_CHAIN?: string
   readonly VITE_RPC_URL?: string
+  readonly RPC_URL?: string
 }
