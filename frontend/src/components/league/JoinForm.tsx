@@ -5,6 +5,8 @@ import { FormField } from '@/components/FormField'
 import { SelectField } from '@/components/SelectField'
 import { TxButton } from '@/components/TxButton'
 import { leagueTreasury } from '@/config/contracts'
+import { useBatchSupport } from '@/hooks/useBatchSupport'
+import { useBatchTx } from '@/hooks/useBatchTx'
 import { useBuyInApproval } from '@/hooks/useBuyInApproval'
 import { useEspnLeague } from '@/hooks/useEspnLeague'
 import { useTx } from '@/hooks/useTx'
@@ -16,6 +18,8 @@ export function JoinForm({ league, members, onJoined }: { league: League; member
   const [teamId, setTeamId] = useState('')
   const [inputError, setInputError] = useState<string>()
   const tx = useTx(onJoined)
+  const batch = useBatchTx(onJoined)
+  const { canBatch, capabilities } = useBatchSupport()
   const { address } = useAccount()
   const approval = useBuyInApproval(address, league.buyIn)
   const taken = new Set(members.map((m) => m.teamId))
@@ -28,13 +32,21 @@ export function JoinForm({ league, members, onJoined }: { league: League; member
     if (!Number.isInteger(id) || id <= 0) return setInputError(espn ? 'Pick your team.' : 'Enter your team ID as a whole number.')
     if (taken.has(id)) return setInputError(`Team ${id} has already joined.`)
     setInputError(undefined)
+    // A smart wallet approves and joins in one atomic step.
+    if (canBatch) {
+      const join = { ...leagueTreasury, functionName: 'joinLeague', args: [league.id, id] } as const
+      return void batch.run((sendCalls) =>
+        sendCalls({ calls: approval.approveCall ? [approval.approveCall, join] : [join], capabilities }),
+      )
+    }
     // Step 1: let the treasury pull the buy-in. The button flips once the allowance refetches.
     if (approval.needsApproval) return approval.approve()
     // Step 2: join. The treasury pulls the USDC itself, so no value is sent.
     tx.run((write) => write({ ...leagueTreasury, functionName: 'joinLeague', args: [league.id, id] }))
   }
 
-  const step = approval.needsApproval ? approval.approveTx : tx
+  const twoStep = approval.needsApproval && !canBatch
+  const step = canBatch ? batch : twoStep ? approval.approveTx : tx
 
   return (
     <form onSubmit={submit} className="flex flex-col gap-6">
@@ -75,11 +87,11 @@ export function JoinForm({ league, members, onJoined }: { league: League; member
           phase={inputError ? 'error' : step.phase}
           error={inputError ?? step.error}
           label={
-            approval.needsApproval
+            twoStep
               ? `Approve ${formatUsdc(league.buyIn)}`
               : `Pay ${formatUsdc(league.buyIn)} and join`
           }
-          pendingLabel={approval.needsApproval ? 'Approving…' : 'Joining…'}
+          pendingLabel={twoStep ? 'Approving…' : 'Joining…'}
         />
       </div>
     </form>

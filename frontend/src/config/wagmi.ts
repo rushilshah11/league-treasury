@@ -1,4 +1,5 @@
 import { getDefaultConfig } from '@rainbow-me/rainbowkit'
+import { base, metaMaskWallet, rainbowWallet, walletConnectWallet } from '@rainbow-me/rainbowkit/wallets'
 import { createConfig, http, type Transport } from 'wagmi'
 import { mock } from 'wagmi/connectors'
 import { chain, rpcUrl } from './chain'
@@ -13,6 +14,11 @@ function walletConfig() {
     projectId: import.meta.env.VITE_WALLETCONNECT_PROJECT_ID || 'local-dev',
     chains: [chain],
     transports: { [chain.id]: http(rpcUrl) },
+    // Base Account is a smart wallet with no seed phrase or extension, so family members can join
+    // with a passkey. It can also batch the USDC approval and the payment into one step.
+    wallets: [
+      { groupName: 'Recommended', wallets: [base, metaMaskWallet, rainbowWallet, walletConnectWallet] },
+    ],
   })
 }
 

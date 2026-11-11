@@ -9,6 +9,8 @@ import { PayoutTable } from '@/components/league/PayoutTable'
 import { Text } from '@/components/typography'
 import { leagueTreasury } from '@/config/contracts'
 import { REPORTER_ADDRESS } from '@/config/reporter'
+import { useBatchSupport } from '@/hooks/useBatchSupport'
+import { useBatchTx } from '@/hooks/useBatchTx'
 import { useBuyInApproval } from '@/hooks/useBuyInApproval'
 import { useTx } from '@/hooks/useTx'
 import { sportIndex, type EspnLeague, type SportCode } from '@/lib/espn'
@@ -80,10 +82,13 @@ export function CreateLeagueForm({ me, onCreated }: CreateLeagueFormProps) {
 function LeagueDetailsForm({ espn, me, onCreated }: CreateLeagueFormProps & { espn: EspnLeague }) {
   const [draft, setDraft] = useState(() => initialDraft(espn))
   const [inputError, setInputError] = useState<string>()
-  const tx = useTx((receipt) => {
+  const onCreatedReceipt = (receipt: TransactionReceipt) => {
     const id = leagueIdFrom(receipt)
     if (id !== undefined) onCreated(id)
-  })
+  }
+  const tx = useTx(onCreatedReceipt)
+  const batch = useBatchTx(onCreatedReceipt)
+  const { canBatch, capabilities } = useBatchSupport()
 
   const field = (key: keyof Draft) => ({
     value: draft[key],
@@ -99,33 +104,39 @@ function LeagueDetailsForm({ espn, me, onCreated }: CreateLeagueFormProps & { es
     /* preview shows 0 until the buy-in parses */
   }
   const approval = useBuyInApproval(me, buyIn)
-  const step = approval.needsApproval ? approval.approveTx : tx
+  const twoStep = approval.needsApproval && !canBatch
+  const step = canBatch ? batch : twoStep ? approval.approveTx : tx
 
   function submit(e: FormEvent) {
     e.preventDefault()
     const problem = validate(draft, espn, me)
     setInputError(problem ?? undefined)
     if (problem) return
+    const create = {
+      ...leagueTreasury,
+      functionName: 'createLeague',
+      args: [
+        draft.name.trim(),
+        { leagueId: BigInt(espn.id), season: espn.season, sport: sportIndex(espn.sport as SportCode) },
+        REPORTER_ADDRESS,
+        buyIn,
+        teams,
+        BigInt(fromDateTimeLocal(draft.joinDeadline)),
+        BigInt(fromDateTimeLocal(draft.standingsDeadline)),
+        linearPayoutBps(teams),
+        Number(draft.teamId),
+      ],
+    } as const
+    // A smart wallet approves and creates in one atomic step.
+    if (canBatch) {
+      return void batch.run((sendCalls) =>
+        sendCalls({ calls: approval.approveCall ? [approval.approveCall, create] : [create], capabilities }),
+      )
+    }
     // Step 1: let the treasury pull the commissioner's buy-in. The button flips once the allowance refetches.
     if (approval.needsApproval) return approval.approve()
     // Step 2: create. The treasury pulls the USDC itself, so no value is sent.
-    tx.run((write) =>
-      write({
-        ...leagueTreasury,
-        functionName: 'createLeague',
-        args: [
-          draft.name.trim(),
-          { leagueId: BigInt(espn.id), season: espn.season, sport: sportIndex(espn.sport as SportCode) },
-          REPORTER_ADDRESS,
-          buyIn,
-          teams,
-          BigInt(fromDateTimeLocal(draft.joinDeadline)),
-          BigInt(fromDateTimeLocal(draft.standingsDeadline)),
-          linearPayoutBps(teams),
-          Number(draft.teamId),
-        ],
-      }),
-    )
+    tx.run((write) => write(create))
   }
 
   return (
@@ -199,11 +210,11 @@ function LeagueDetailsForm({ espn, me, onCreated }: CreateLeagueFormProps & { es
           label={
             buyIn <= 0n
               ? 'Create league'
-              : approval.needsApproval
+              : twoStep
                 ? `Approve ${formatUsdc(buyIn)}`
                 : `Pay ${formatUsdc(buyIn)} and create league`
           }
-          pendingLabel={approval.needsApproval ? 'Approving…' : 'Creating…'}
+          pendingLabel={twoStep ? 'Approving…' : 'Creating…'}
         />
       </div>
     </form>
