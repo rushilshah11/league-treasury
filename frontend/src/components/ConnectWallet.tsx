@@ -1,5 +1,27 @@
 import { ConnectButton } from '@rainbow-me/rainbowkit'
+import { erc20Abi, type Address } from 'viem'
+import { useReadContract } from 'wagmi'
 import { Button } from '@/components/ui/button'
+import { useUsdc } from '@/hooks/useUsdc'
+import { formatUsdc } from '@/lib/format'
+
+/** The wallet button's label: the address, plus the wallet's USDC balance once it has loaded. */
+function AccountLabel({ address, displayName }: { address: Address; displayName: string }) {
+  const { usdc } = useUsdc()
+  const { data: balance } = useReadContract({
+    address: usdc?.address,
+    abi: erc20Abi,
+    functionName: 'balanceOf',
+    args: [address],
+    query: { enabled: usdc !== undefined },
+  })
+  return (
+    <>
+      {balance !== undefined && <span className="text-muted-foreground">{formatUsdc(balance)} USDC</span>}
+      <span>{displayName}</span>
+    </>
+  )
+}
 
 /**
  * RainbowKit's wallet logic with our own shadcn Button.
@@ -29,7 +51,7 @@ export function ConnectWallet() {
 
         return (
           <Button variant="outline" onClick={openAccountModal}>
-            {account.displayName}
+            <AccountLabel address={account.address as Address} displayName={account.displayName} />
           </Button>
         )
       }}
