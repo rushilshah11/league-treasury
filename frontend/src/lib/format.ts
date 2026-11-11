@@ -1,10 +1,13 @@
-import { formatEther, type Address } from 'viem'
+import { formatUnits, type Address } from 'viem'
 
-/** 10000000000000000n -> "0.01 ETH" */
-export function formatEth(wei: bigint, maxDecimals = 6): string {
-  const [whole, fraction = ''] = formatEther(wei).split('.')
-  const trimmed = fraction.slice(0, maxDecimals).replace(/0+$/, '')
-  return `${whole}${trimmed ? `.${trimmed}` : ''} ETH`
+/** USDC has 6 decimals: 1 USDC = 1_000_000 base units. */
+export const USDC_DECIMALS = 6
+
+/** 20000000n -> "$20.00", 1234567890n -> "$1,234.56" (rounds down to the cent). */
+export function formatUsdc(amount: bigint): string {
+  const [whole, fraction = ''] = formatUnits(amount, USDC_DECIMALS).split('.')
+  const cents = fraction.padEnd(2, '0').slice(0, 2)
+  return `$${BigInt(whole).toLocaleString('en-US')}.${cents}`
 }
 
 /** 0x1234...abcd */

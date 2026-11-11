@@ -2,6 +2,17 @@
 // `as const` lets wagmi and viem infer function names, arguments and return types.
 export const leagueTreasuryAbi = [
   {
+    "type": "constructor",
+    "inputs": [
+      {
+        "name": "_usdc",
+        "type": "address",
+        "internalType": "contract IERC20"
+      }
+    ],
+    "stateMutability": "nonpayable"
+  },
+  {
     "type": "function",
     "name": "CHALLENGE_WINDOW",
     "inputs": [],
@@ -171,7 +182,7 @@ export const leagueTreasuryAbi = [
         "internalType": "uint256"
       }
     ],
-    "stateMutability": "payable"
+    "stateMutability": "nonpayable"
   },
   {
     "type": "function",
@@ -446,7 +457,7 @@ export const leagueTreasuryAbi = [
       }
     ],
     "outputs": [],
-    "stateMutability": "payable"
+    "stateMutability": "nonpayable"
   },
   {
     "type": "function",
@@ -698,6 +709,19 @@ export const leagueTreasuryAbi = [
         "name": "",
         "type": "address",
         "internalType": "address"
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
+    "name": "usdc",
+    "inputs": [],
+    "outputs": [
+      {
+        "name": "",
+        "type": "address",
+        "internalType": "contract IERC20"
       }
     ],
     "stateMutability": "view"
@@ -1107,22 +1131,6 @@ export const leagueTreasuryAbi = [
   },
   {
     "type": "error",
-    "name": "LeagueTreasury__IncorrectBuyIn",
-    "inputs": [
-      {
-        "name": "sent",
-        "type": "uint256",
-        "internalType": "uint256"
-      },
-      {
-        "name": "required",
-        "type": "uint256",
-        "internalType": "uint256"
-      }
-    ]
-  },
-  {
-    "type": "error",
     "name": "LeagueTreasury__InvalidBuyIn",
     "inputs": [
       {
@@ -1250,6 +1258,11 @@ export const leagueTreasuryAbi = [
         "internalType": "uint32"
       }
     ]
+  },
+  {
+    "type": "error",
+    "name": "LeagueTreasury__InvalidToken",
+    "inputs": []
   },
   {
     "type": "error",
@@ -1457,17 +1470,12 @@ export const leagueTreasuryAbi = [
   },
   {
     "type": "error",
-    "name": "LeagueTreasury__TransferFailed",
+    "name": "SafeERC20FailedOperation",
     "inputs": [
       {
-        "name": "recipient",
+        "name": "token",
         "type": "address",
         "internalType": "address"
-      },
-      {
-        "name": "amount",
-        "type": "uint256",
-        "internalType": "uint256"
       }
     ]
   }

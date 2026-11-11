@@ -2,9 +2,11 @@ import type { Address } from 'viem'
 import { leagueTreasuryAbi } from '../abi/leagueTreasuryAbi'
 import { isLocalChain } from './chain'
 
-// The first contract deployed by Anvil's account 0 on a fresh chain always lands
-// at this address, so local development works without any configuration.
-const ANVIL_FIRST_DEPLOYMENT: Address = '0x5FbDB2315678afecb367f032d93F642f64180aa3'
+// Contract addresses come from the deployer's address plus its nonce, so on a fresh
+// Anvil chain they're fixed by deploy order. The deploy script deploys MockUSDC first
+// (nonce 0 → 0x5FbD…0aa3) and the treasury second (nonce 1 → this address), so local
+// development works without any configuration. Reordering the script changes this.
+const ANVIL_TREASURY_DEPLOYMENT: Address = '0xe7f1725E7734CE288F8367e1Bb143E90bb3F0512'
 
 const configured = (import.meta.env.VITE_TREASURY_ADDRESS as Address | undefined) || undefined
 if (!configured && !isLocalChain) {
@@ -12,6 +14,6 @@ if (!configured && !isLocalChain) {
 }
 
 export const leagueTreasury = {
-  address: configured ?? ANVIL_FIRST_DEPLOYMENT,
+  address: configured ?? ANVIL_TREASURY_DEPLOYMENT,
   abi: leagueTreasuryAbi,
 } as const

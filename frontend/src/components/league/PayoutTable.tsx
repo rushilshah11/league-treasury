@@ -1,5 +1,5 @@
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
-import { formatEth } from '@/lib/format'
+import { formatUsdc } from '@/lib/format'
 import { formatBps, payoutAmounts } from '@/lib/payouts'
 
 /** How the pot is split by finishing place. */
@@ -19,7 +19,7 @@ export function PayoutTable({ payoutBps, pot }: { payoutBps: number[]; pot: bigi
           <TableRow key={i}>
             <TableCell className="font-bold">{i + 1}</TableCell>
             <TableCell className="text-right">{formatBps(bps)}</TableCell>
-            <TableCell className="text-right">{formatEth(amounts[i])}</TableCell>
+            <TableCell className="text-right">{formatUsdc(amounts[i])}</TableCell>
           </TableRow>
         ))}
       </TableBody>

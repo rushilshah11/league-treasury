@@ -1,6 +1,6 @@
 import { isAddressEqual, type Address } from 'viem'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
-import { formatEth, shortAddress } from '@/lib/format'
+import { formatUsdc, shortAddress } from '@/lib/format'
 import { formatRecord, type EspnLeague } from '@/lib/espn'
 import type { League, Member } from '@/lib/league'
 import { formatBps, payoutAmounts } from '@/lib/payouts'
@@ -49,7 +49,7 @@ export function LiveStandingsTable({ league, espn, members, payoutBps, me }: Liv
                 {isMe && <span className="ml-2 font-bold text-primary">You</span>}
               </TableCell>
               <TableCell className="text-right">{payoutBps[i] !== undefined ? formatBps(payoutBps[i]) : '–'}</TableCell>
-              <TableCell className="text-right">{amounts[i] !== undefined ? formatEth(amounts[i]) : '–'}</TableCell>
+              <TableCell className="text-right">{amounts[i] !== undefined ? formatUsdc(amounts[i]) : '–'}</TableCell>
             </TableRow>
           )
         })}

@@ -1,6 +1,6 @@
 import type { ReactNode } from 'react'
 
-/** A labelled value, e.g. "Pot / 0.14 ETH". */
+/** A labelled value, e.g. "Pot / $140.00". */
 export function Stat({ label, value }: { label: string; value: ReactNode }) {
   return (
     <div className="flex flex-col gap-1 border-t pt-3">

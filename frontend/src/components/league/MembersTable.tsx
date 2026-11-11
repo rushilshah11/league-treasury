@@ -3,7 +3,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { Text } from '@/components/typography'
 import { useTeamNames } from '@/hooks/useEspnLeague'
 import { teamLabel } from '@/lib/espn'
-import { formatEth, shortAddress } from '@/lib/format'
+import { formatUsdc, shortAddress } from '@/lib/format'
 import { LeagueState, pot, type League, type Member } from '@/lib/league'
 import { payoutAmounts } from '@/lib/payouts'
 
@@ -49,7 +49,7 @@ export function MembersTable({ league, members, payoutBps, me }: MembersTablePro
               </TableCell>
               {ranked && (
                 <TableCell className="text-right">
-                  {member.finalPlace ? formatEth(amounts[member.finalPlace - 1] ?? 0n) : '–'}
+                  {member.finalPlace ? formatUsdc(amounts[member.finalPlace - 1] ?? 0n) : '–'}
                 </TableCell>
               )}
               {settled && (

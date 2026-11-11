@@ -28,7 +28,7 @@ fmt:
 
 # Gas snapshot of every test, saved to .gas-snapshot
 snapshot:
-	forge snapshot
+	forge snapshot --no-match-test "testFuzz_" --no-match-contract Invariant
 
 # Start a local chain (run in its own terminal).
 # 20 funded accounts so a full 14-team league can be tested locally.

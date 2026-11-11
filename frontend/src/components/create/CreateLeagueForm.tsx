@@ -1,5 +1,6 @@
 import { useState, type FormEvent } from 'react'
-import { isAddressEqual, parseEther, parseEventLogs, type Address, type TransactionReceipt } from 'viem'
+import { isAddressEqual, parseUnits, parseEventLogs, type Address, type TransactionReceipt } from 'viem'
+import { BuyInBalance } from '@/components/BuyInBalance'
 import { FormField } from '@/components/FormField'
 import { Section } from '@/components/Section'
 import { SelectField } from '@/components/SelectField'
@@ -8,9 +9,10 @@ import { PayoutTable } from '@/components/league/PayoutTable'
 import { Text } from '@/components/typography'
 import { leagueTreasury } from '@/config/contracts'
 import { REPORTER_ADDRESS } from '@/config/reporter'
+import { useBuyInApproval } from '@/hooks/useBuyInApproval'
 import { useTx } from '@/hooks/useTx'
 import { sportIndex, type EspnLeague, type SportCode } from '@/lib/espn'
-import { formatEth, fromDateTimeLocal, shortAddress, toDateTimeLocal } from '@/lib/format'
+import { USDC_DECIMALS, formatUsdc, fromDateTimeLocal, shortAddress, toDateTimeLocal } from '@/lib/format'
 import { linearPayoutBps } from '@/lib/payouts'
 import { EspnLookup } from './EspnLookup'
 
@@ -31,7 +33,7 @@ function initialDraft(espn: EspnLeague): Draft {
   return {
     name: espn.name.slice(0, 64),
     teamId: '',
-    buyIn: '0.01',
+    buyIn: '20',
     joinDeadline: toDateTimeLocal(now + 7 * DAY),
     standingsDeadline: toDateTimeLocal(now + 180 * DAY),
   }
@@ -43,11 +45,10 @@ function validate(d: Draft, espn: EspnLeague, me: Address): string | null {
   if (espn.size < MIN_TEAMS || espn.size > MAX_TEAMS)
     return `On-Chain Commish supports leagues of ${MIN_TEAMS} to ${MAX_TEAMS} teams.`
   if (!espn.teams.some((t) => t.id === Number(d.teamId))) return 'Pick your team.'
-  try {
-    if (parseEther(d.buyIn) <= 0n) return 'Buy-in must be more than 0.'
-  } catch {
-    return 'Enter the buy-in as a number, like 0.01.'
-  }
+  // Whole cents only: formatUsdc shows two decimals, so a buy-in like 20.123456 would be
+  // displayed as $20.12 while the contract charges $20.123456. Display and charge must match.
+  if (!/^\d+(\.\d{1,2})?$/.test(d.buyIn.trim())) return 'Enter the buy-in in dollars and cents, like 20 or 12.50.'
+  if (parseUnits(d.buyIn.trim(), USDC_DECIMALS) <= 0n) return 'Buy-in must be more than 0.'
   const join = fromDateTimeLocal(d.joinDeadline)
   const standings = fromDateTimeLocal(d.standingsDeadline)
   if (!(join > Date.now() / 1000)) return 'The join deadline must be in the future.'
@@ -93,21 +94,25 @@ function LeagueDetailsForm({ espn, me, onCreated }: CreateLeagueFormProps & { es
   const teams = espn.size
   let buyIn = 0n
   try {
-    buyIn = parseEther(draft.buyIn)
+    buyIn = parseUnits(draft.buyIn.trim(), USDC_DECIMALS)
   } catch {
     /* preview shows 0 until the buy-in parses */
   }
+  const approval = useBuyInApproval(me, buyIn)
+  const step = approval.needsApproval ? approval.approveTx : tx
 
   function submit(e: FormEvent) {
     e.preventDefault()
     const problem = validate(draft, espn, me)
     setInputError(problem ?? undefined)
     if (problem) return
+    // Step 1: let the treasury pull the commissioner's buy-in. The button flips once the allowance refetches.
+    if (approval.needsApproval) return approval.approve()
+    // Step 2: create. The treasury pulls the USDC itself, so no value is sent.
     tx.run((write) =>
       write({
         ...leagueTreasury,
         functionName: 'createLeague',
-        value: buyIn,
         args: [
           draft.name.trim(),
           { leagueId: BigInt(espn.id), season: espn.season, sport: sportIndex(espn.sport as SportCode) },
@@ -145,9 +150,9 @@ function LeagueDetailsForm({ espn, me, onCreated }: CreateLeagueFormProps & { es
           </SelectField>
           <FormField
             id="buy-in"
-            label="Buy-in (ETH)"
+            label="Buy-in (USDC)"
             inputMode="decimal"
-            hint={`Test ETH only. All ${teams} teams pay this to join.`}
+            hint={`Test USDC only. All ${teams} teams pay this to join.`}
             {...field('buyIn')}
           />
         </div>
@@ -180,17 +185,27 @@ function LeagueDetailsForm({ espn, me, onCreated }: CreateLeagueFormProps & { es
       </Section>
 
       <Section title="Payouts">
-        <Text variant="small">Split across all {teams} places, from a pot of {formatEth(buyIn * BigInt(teams))}.</Text>
+        <Text variant="small">Split across all {teams} places, from a pot of {formatUsdc(buyIn * BigInt(teams))}.</Text>
         <PayoutTable payoutBps={linearPayoutBps(teams)} pot={buyIn * BigInt(teams)} />
       </Section>
 
-      <TxButton
-        type="submit"
-        phase={inputError ? 'error' : tx.phase}
-        error={inputError ?? tx.error}
-        label={buyIn > 0n ? `Pay ${formatEth(buyIn)} and create league` : 'Create league'}
-        pendingLabel="Creating…"
-      />
+      <div className="flex flex-col gap-2">
+        <BuyInBalance balance={approval.balance} buyIn={buyIn} />
+        <TxButton
+          type="submit"
+          disabled={!approval.loaded || approval.insufficient}
+          phase={inputError ? 'error' : step.phase}
+          error={inputError ?? step.error}
+          label={
+            buyIn <= 0n
+              ? 'Create league'
+              : approval.needsApproval
+                ? `Approve ${formatUsdc(buyIn)}`
+                : `Pay ${formatUsdc(buyIn)} and create league`
+          }
+          pendingLabel={approval.needsApproval ? 'Approving…' : 'Creating…'}
+        />
+      </div>
     </form>
   )
 }

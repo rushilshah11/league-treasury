@@ -1,5 +1,5 @@
 import { Stat, StatGrid } from '@/components/Stat'
-import { formatDateTime, formatEth } from '@/lib/format'
+import { formatDateTime, formatUsdc } from '@/lib/format'
 import { LeagueState, challengeWindowEnd, disputeResolutionEnd, pot, type League } from '@/lib/league'
 
 /** The one date that matters most right now, for this league's stage. */
@@ -22,8 +22,8 @@ export function LeagueStats({ league }: { league: League }) {
   const date = keyDate(league)
   return (
     <StatGrid>
-      <Stat label="Pot" value={formatEth(pot(league))} />
-      <Stat label="Buy-in" value={formatEth(league.buyIn)} />
+      <Stat label="Pot" value={formatUsdc(pot(league))} />
+      <Stat label="Buy-in" value={formatUsdc(league.buyIn)} />
       <Stat label="Teams" value={`${league.memberCount} of ${league.teamCount}`} />
       {date && <Stat label={date.label} value={formatDateTime(date.value)} />}
     </StatGrid>
