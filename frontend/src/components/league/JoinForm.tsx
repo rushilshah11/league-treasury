@@ -29,20 +29,35 @@ export function JoinForm({ league, members, onJoined }: { league: League; member
   function submit(e: FormEvent) {
     e.preventDefault()
     const id = Number(teamId)
-    if (!Number.isInteger(id) || id <= 0) return setInputError(espn ? 'Pick your team.' : 'Enter your team ID as a whole number.')
+    if (!Number.isInteger(id) || id <= 0)
+      return setInputError(espn ? 'Pick your team.' : 'Enter your team ID as a whole number.')
     if (taken.has(id)) return setInputError(`Team ${id} has already joined.`)
     setInputError(undefined)
     // A smart wallet approves and joins in one atomic step.
     if (canBatch) {
-      const join = { ...leagueTreasury, functionName: 'joinLeague', args: [league.id, id] } as const
+      const join = {
+        to: leagueTreasury.address,
+        abi: leagueTreasury.abi,
+        functionName: 'joinLeague',
+        args: [league.id, id],
+      } as const
       return void batch.run((sendCalls) =>
-        sendCalls({ calls: approval.approveCall ? [approval.approveCall, join] : [join], capabilities }),
+        sendCalls({
+          calls: approval.approveCall ? [approval.approveCall, join] : [join],
+          capabilities,
+        }),
       )
     }
     // Step 1: let the treasury pull the buy-in. The button flips once the allowance refetches.
     if (approval.needsApproval) return approval.approve()
     // Step 2: join. The treasury pulls the USDC itself, so no value is sent.
-    tx.run((write) => write({ ...leagueTreasury, functionName: 'joinLeague', args: [league.id, id] }))
+    tx.run((write) =>
+      write({
+        ...leagueTreasury,
+        functionName: 'joinLeague',
+        args: [league.id, id],
+      }),
+    )
   }
 
   const twoStep = approval.needsApproval && !canBatch
@@ -86,11 +101,7 @@ export function JoinForm({ league, members, onJoined }: { league: League; member
           disabled={!approval.loaded || approval.insufficient}
           phase={inputError ? 'error' : step.phase}
           error={inputError ?? step.error}
-          label={
-            twoStep
-              ? `Approve ${formatUsdc(league.buyIn)}`
-              : `Pay ${formatUsdc(league.buyIn)} and join`
-          }
+          label={twoStep ? `Approve ${formatUsdc(league.buyIn)}` : `Pay ${formatUsdc(league.buyIn)} and join`}
           pendingLabel={twoStep ? 'Approving…' : 'Joining…'}
         />
       </div>

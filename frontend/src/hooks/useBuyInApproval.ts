@@ -52,11 +52,22 @@ export function useBuyInApproval(owner: Address | undefined, buyIn: bigint) {
     /** The approve call as data, for wallets that can batch it with the payment. Undefined when not needed. */
     approveCall:
       usdc && loaded && allowance.data < buyIn
-        ? ({ ...usdc, functionName: 'approve', args: [leagueTreasury.address, buyIn] } as const)
+        ? ({
+            to: usdc.address,
+            abi: usdc.abi,
+            functionName: 'approve',
+            args: [leagueTreasury.address, buyIn],
+          } as const)
         : undefined,
     approve: () => {
       if (!usdc) return
-      approveTx.run((write) => write({ ...usdc, functionName: 'approve', args: [leagueTreasury.address, buyIn] }))
+      approveTx.run((write) =>
+        write({
+          ...usdc,
+          functionName: 'approve',
+          args: [leagueTreasury.address, buyIn],
+        }),
+      )
     },
     approveTx,
   }

@@ -60,11 +60,18 @@ function validate(d: Draft, espn: EspnLeague, me: Address): string | null {
 }
 
 function leagueIdFrom(receipt: TransactionReceipt): bigint | undefined {
-  const [log] = parseEventLogs({ abi: leagueTreasury.abi, eventName: 'LeagueCreated', logs: receipt.logs })
+  const [log] = parseEventLogs({
+    abi: leagueTreasury.abi,
+    eventName: 'LeagueCreated',
+    logs: receipt.logs,
+  })
   return log?.args.leagueId
 }
 
-type CreateLeagueFormProps = { me: Address; onCreated: (leagueId: bigint) => void }
+type CreateLeagueFormProps = {
+  me: Address
+  onCreated: (leagueId: bigint) => void
+}
 
 /** Step 1: find the ESPN league. Step 2: set the money rules. */
 export function CreateLeagueForm({ me, onCreated }: CreateLeagueFormProps) {
@@ -112,25 +119,39 @@ function LeagueDetailsForm({ espn, me, onCreated }: CreateLeagueFormProps & { es
     const problem = validate(draft, espn, me)
     setInputError(problem ?? undefined)
     if (problem) return
+    const args = [
+      draft.name.trim(),
+      {
+        leagueId: BigInt(espn.id),
+        season: espn.season,
+        sport: sportIndex(espn.sport as SportCode),
+      },
+      REPORTER_ADDRESS,
+      buyIn,
+      teams,
+      BigInt(fromDateTimeLocal(draft.joinDeadline)),
+      BigInt(fromDateTimeLocal(draft.standingsDeadline)),
+      linearPayoutBps(teams),
+      Number(draft.teamId),
+    ] as const
     const create = {
       ...leagueTreasury,
       functionName: 'createLeague',
-      args: [
-        draft.name.trim(),
-        { leagueId: BigInt(espn.id), season: espn.season, sport: sportIndex(espn.sport as SportCode) },
-        REPORTER_ADDRESS,
-        buyIn,
-        teams,
-        BigInt(fromDateTimeLocal(draft.joinDeadline)),
-        BigInt(fromDateTimeLocal(draft.standingsDeadline)),
-        linearPayoutBps(teams),
-        Number(draft.teamId),
-      ],
+      args,
+    } as const
+    const createCall = {
+      to: leagueTreasury.address,
+      abi: leagueTreasury.abi,
+      functionName: 'createLeague',
+      args,
     } as const
     // A smart wallet approves and creates in one atomic step.
     if (canBatch) {
       return void batch.run((sendCalls) =>
-        sendCalls({ calls: approval.approveCall ? [approval.approveCall, create] : [create], capabilities }),
+        sendCalls({
+          calls: approval.approveCall ? [approval.approveCall, createCall] : [createCall],
+          capabilities,
+        }),
       )
     }
     // Step 1: let the treasury pull the commissioner's buy-in. The button flips once the allowance refetches.
@@ -190,13 +211,15 @@ function LeagueDetailsForm({ espn, me, onCreated }: CreateLeagueFormProps & { es
 
       <Section title="Final standings">
         <Text variant="muted" measure="readable">
-          The On-Chain Commish bot posts your final standings from ESPN after the season ({shortAddress(REPORTER_ADDRESS)}).
-          No one in the league, including you, can post them.
+          The On-Chain Commish bot posts your final standings from ESPN after the season (
+          {shortAddress(REPORTER_ADDRESS)}). No one in the league, including you, can post them.
         </Text>
       </Section>
 
       <Section title="Payouts">
-        <Text variant="small">Split across all {teams} places, from a pot of {formatUsdc(buyIn * BigInt(teams))}.</Text>
+        <Text variant="small">
+          Split across all {teams} places, from a pot of {formatUsdc(buyIn * BigInt(teams))}.
+        </Text>
         <PayoutTable payoutBps={linearPayoutBps(teams)} pot={buyIn * BigInt(teams)} />
       </Section>
 
