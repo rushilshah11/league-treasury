@@ -15,6 +15,7 @@ contract Handler is Test {
     // Ghost variables: what the handler believes has moved in and out of the treasury.
     uint256 public ghost_deposited;
     uint256 public ghost_refunded;
+    uint256 public ghost_claimed;
 
     uint256 internal constant STARTING_BALANCE = 1_000_000_000e6;
     uint256 internal constant MAX_BUY_IN = 1_000e6;
@@ -90,6 +91,83 @@ contract Handler is Test {
         vm.prank(player);
         treasury.withdrawRefund(leagueId);
         ghost_refunded += buyIn;
+    }
+
+    function submitStandings(uint256 leagueSeed, uint256 shuffleSeed) external {
+        if (leagueIds.length == 0) return;
+        uint256 leagueId = leagueIds[leagueSeed % leagueIds.length];
+
+        (,, uint8 teamCount,, LeagueTreasury.LeagueState state,, uint64 standingsDeadline,,,) =
+            treasury.leagues(leagueId);
+        if (state != LeagueTreasury.LeagueState.ACTIVE) return;
+        if (block.timestamp >= standingsDeadline) return;
+
+        uint32[] memory ranking = new uint32[](teamCount);
+        for (uint32 i = 0; i < teamCount; i++) {
+            ranking[i] = i + 1;
+        }
+        // Fisher-Yates shuffle, driven by the random seed
+        for (uint256 i = teamCount - 1; i > 0; i--) {
+            uint256 j = uint256(keccak256(abi.encode(shuffleSeed, i))) % (i + 1);
+            (ranking[i], ranking[j]) = (ranking[j], ranking[i]);
+        }
+
+        vm.prank(reporter);
+        treasury.submitStandings(leagueId, ranking);
+    }
+
+    function dispute(uint256 leagueSeed, uint256 actorSeed) external {
+        if (leagueIds.length == 0) return;
+        uint256 leagueId = leagueIds[leagueSeed % leagueIds.length];
+        address player = actors[actorSeed % actors.length];
+
+        (,,,, LeagueTreasury.LeagueState state,,,, uint64 submittedAt,) = treasury.leagues(leagueId);
+        if (state != LeagueTreasury.LeagueState.STANDINGS_SUBMITTED) return;
+        if (block.timestamp >= submittedAt + treasury.CHALLENGE_WINDOW()) return;
+        (, bool joined,,) = treasury.members(leagueId, player);
+        if (!joined) return;
+
+        vm.prank(player);
+        treasury.dispute(leagueId);
+    }
+
+    function finalize(uint256 leagueSeed) external {
+        if (leagueIds.length == 0) return;
+        uint256 leagueId = leagueIds[leagueSeed % leagueIds.length];
+
+        (,,,, LeagueTreasury.LeagueState state,,,, uint64 submittedAt,) = treasury.leagues(leagueId);
+        if (state != LeagueTreasury.LeagueState.STANDINGS_SUBMITTED) return;
+        if (block.timestamp < submittedAt + treasury.CHALLENGE_WINDOW()) return;
+
+        treasury.finalize(leagueId); // anyone can finalize
+    }
+
+    function claim(uint256 leagueSeed, uint256 actorSeed) external {
+        if (leagueIds.length == 0) return;
+        uint256 leagueId = leagueIds[leagueSeed % leagueIds.length];
+        address player = actors[actorSeed % actors.length];
+
+        (,,,, LeagueTreasury.LeagueState state,,,,,) = treasury.leagues(leagueId);
+        if (state != LeagueTreasury.LeagueState.FINALIZED) return;
+        (, bool joined, bool claimed,) = treasury.members(leagueId, player);
+        if (!joined || claimed) return;
+
+        // Record what the contract promised *before* claiming; Rule 1 checks it paid exactly that.
+        uint256 payout = treasury.getPayout(leagueId, player);
+        vm.prank(player);
+        treasury.claim(leagueId);
+        ghost_claimed += payout;
+    }
+
+    function cancelLeague(uint256 leagueSeed) external {
+        if (leagueIds.length == 0) return;
+        uint256 leagueId = leagueIds[leagueSeed % leagueIds.length];
+
+        (address commissioner,,,, LeagueTreasury.LeagueState state,,,,,) = treasury.leagues(leagueId);
+        if (state != LeagueTreasury.LeagueState.OPEN) return;
+
+        vm.prank(commissioner);
+        treasury.cancelLeague(leagueId);
     }
 
     /*//////////////////////////////////////////////////////////////

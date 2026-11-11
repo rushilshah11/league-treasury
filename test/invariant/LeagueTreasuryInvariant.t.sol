@@ -18,18 +18,26 @@ contract LeagueTreasuryInvariantTest is StdInvariant, Test {
         handler = new Handler(treasury, usdc);
 
         // Only let Foundry call the handler's action functions
-        bytes4[] memory selectors = new bytes4[](4);
+        bytes4[] memory selectors = new bytes4[](9);
         selectors[0] = Handler.createLeague.selector;
         selectors[1] = Handler.joinLeague.selector;
         selectors[2] = Handler.warp.selector;
         selectors[3] = Handler.withdrawRefund.selector;
+        selectors[4] = Handler.submitStandings.selector;
+        selectors[5] = Handler.dispute.selector;
+        selectors[6] = Handler.finalize.selector;
+        selectors[7] = Handler.claim.selector;
+        selectors[8] = Handler.cancelLeague.selector;
         targetSelector(FuzzSelector({addr: address(handler), selectors: selectors}));
         targetContract(address(handler));
     }
 
     /// Invariant 1: the contract's balance matches the handler's own bookkeeping.
     function invariant_BalanceMatchesGhostAccounting() public view {
-        assertEq(usdc.balanceOf(address(treasury)), handler.ghost_deposited() - handler.ghost_refunded());
+        assertEq(
+            usdc.balanceOf(address(treasury)),
+            handler.ghost_deposited() - handler.ghost_refunded() - handler.ghost_claimed()
+        );
     }
 
     /// Invariant 2: the contract holds exactly what it owes, no more (stuck) and no less (insolvent).
