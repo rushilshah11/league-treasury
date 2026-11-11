@@ -7,7 +7,7 @@
 // From the repo root: make report LEAGUE=0  (add TEST=1 for --test).
 //
 // Settings (environment variables):
-//   CHAIN                 anvil (default) or sepolia
+//   CHAIN                 anvil (default), sepolia or base-sepolia
 //   RPC_URL               defaults to http://127.0.0.1:8545 on anvil, the public endpoint on sepolia
 //   TREASURY_ADDRESS      the deployed contract (required off anvil)
 //   REPORTER_PRIVATE_KEY  the bot wallet's key (required off anvil; locally Anvil account 19 is used)
@@ -17,15 +17,15 @@ import { dirname, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { createPublicClient, createWalletClient, http, isAddressEqual } from 'viem'
 import { mnemonicToAccount, privateKeyToAccount } from 'viem/accounts'
-import { anvil, sepolia } from 'viem/chains'
+import { anvil, baseSepolia, sepolia } from 'viem/chains'
 import { SPORT_CODES, fetchEspnLeague } from '../server/espn.mjs'
 
 const here = dirname(fileURLToPath(import.meta.url))
 const abi = JSON.parse(readFileSync(resolve(here, '../src/abi/leagueTreasuryAbi.json'), 'utf8'))
 
-const CHAINS = { anvil, sepolia }
+const CHAINS = { anvil, sepolia, 'base-sepolia': baseSepolia }
 const chain = CHAINS[process.env.CHAIN ?? 'anvil']
-if (!chain) fail(`Unknown CHAIN "${process.env.CHAIN}". Use anvil or sepolia.`)
+if (!chain) fail(`Unknown CHAIN "${process.env.CHAIN}". Use anvil, sepolia or base-sepolia.`)
 const isLocal = chain.id === anvil.id
 
 const RPC_URL = process.env.RPC_URL || (isLocal ? 'http://127.0.0.1:8545' : undefined)
