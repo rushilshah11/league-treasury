@@ -33,6 +33,9 @@ jobs:
 
       - name: Run Forge tests
         run: forge test -vvv
+      
+      - name: Check gas snapshot
+        run: forge snapshot --check --no-match-test "testFuzz_" --no-match-contract Invariant
   slither:
     name: Slither static analysis
     runs-on: ubuntu-latest
