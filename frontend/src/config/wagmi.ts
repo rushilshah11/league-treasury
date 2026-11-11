@@ -17,7 +17,7 @@ function walletConfig() {
     // Base Account is a smart wallet with no seed phrase or extension, so family members can join
     // with a passkey. It can also batch the USDC approval and the payment into one step.
     wallets: [
-      { groupName: 'Recommended', wallets: [base, metaMaskWallet, rainbowWallet, walletConnectWallet] },
+      { groupName: 'Recommended', wallets: [metaMaskWallet, rainbowWallet, walletConnectWallet, base] },
     ],
   })
 }
