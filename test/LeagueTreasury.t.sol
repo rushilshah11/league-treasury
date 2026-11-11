@@ -3,7 +3,9 @@ pragma solidity ^0.8.24;
 
 import {Test} from "forge-std/Test.sol";
 import {LeagueTreasury} from "../src/LeagueTreasury.sol";
-import {RejectingWallet, ReentrantWallet} from "./mocks/MaliciousWallets.sol";
+import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
+import {IERC20Errors} from "@openzeppelin/contracts/interfaces/draft-IERC6093.sol";
+import {MockUSDC} from "./mocks/MockUSDC.sol";
 
 contract LeagueTreasuryTest is Test {
     LeagueTreasury public leagueTreasury;
@@ -12,18 +14,28 @@ contract LeagueTreasuryTest is Test {
     address public alice = makeAddr("alice");
     address public bob = makeAddr("bob");
 
-    uint256 constant BUY_IN = 0.01 ether;
+    uint256 constant BUY_IN = 20e6; // 20 USDC (6 decimals)
     uint8 constant TEAM_COUNT = 14;
     string constant LEAGUE_NAME = "Shah Family League";
     uint64 constant ESPN_LEAGUE_ID = 12345678;
     uint16 constant ESPN_SEASON = 2027;
-    uint256 constant STARTING_BALANCE = 1 ether;
+    uint256 constant STARTING_BALANCE = 1_000e6; // 1,000 USDC
     // The commissioner takes this team when creating a league.
     uint32 constant COMMISSIONER_TEAM = 1;
+    MockUSDC public usdc;
 
     /*//////////////////////////////////////////////////////////////
                                 HELPERS
     //////////////////////////////////////////////////////////////*/
+
+    /// Gives `who` USDC and approves the treasury to pull it. The USDC version of
+    /// vm.deal: with ETH a balance was enough, with a token the treasury also needs
+    /// permission (an allowance) before it can take the buy-in.
+    function _fund(address who, uint256 amount) internal {
+        usdc.mint(who, amount);
+        vm.prank(who);
+        usdc.approve(address(leagueTreasury), type(uint256).max);
+    }
 
     function _espn() internal pure returns (LeagueTreasury.EspnLink memory) {
         return LeagueTreasury.EspnLink(ESPN_LEAGUE_ID, ESPN_SEASON, LeagueTreasury.Sport.BASKETBALL);
@@ -47,7 +59,7 @@ contract LeagueTreasuryTest is Test {
     function _createLeague() internal returns (uint256 leagueId) {
         uint16[] memory payout = _linearPayout(TEAM_COUNT);
         vm.prank(commissioner);
-        leagueId = leagueTreasury.createLeague{value: BUY_IN}(
+        leagueId = leagueTreasury.createLeague(
             LEAGUE_NAME,
             _espn(),
             reporter,
@@ -62,14 +74,14 @@ contract LeagueTreasuryTest is Test {
 
     function _join(address who, uint256 leagueId, uint32 teamId) internal {
         vm.prank(who);
-        leagueTreasury.joinLeague{value: BUY_IN}(leagueId, teamId);
+        leagueTreasury.joinLeague(leagueId, teamId);
     }
 
     /// Fills every open slot with generated members (teams 2..TEAM_COUNT; the commissioner has team 1).
     function _fillLeague(uint256 leagueId) internal {
         for (uint32 i = 2; i <= TEAM_COUNT; i++) {
             address member = _member(i);
-            vm.deal(member, STARTING_BALANCE);
+            _fund(member, STARTING_BALANCE);
             _join(member, leagueId, i);
         }
     }
@@ -142,18 +154,18 @@ contract LeagueTreasuryTest is Test {
     }
 
     function _claim(address who, uint256 leagueId) internal returns (uint256 received) {
-        uint256 before = who.balance;
+        uint256 before = usdc.balanceOf(who);
         vm.prank(who);
         leagueTreasury.claim(leagueId);
-        received = who.balance - before;
+        received = usdc.balanceOf(who) - before;
     }
 
     /// Runs a full league of `teamCount` teams with `buyIn`, from creation to
     /// finalization. Team i finishes in place i. Members are named "fm<i>".
     function _runFullLeague(uint8 teamCount, uint256 buyIn) internal returns (uint256 leagueId) {
-        vm.deal(commissioner, buyIn);
+        _fund(commissioner, buyIn);
         vm.prank(commissioner);
-        leagueId = leagueTreasury.createLeague{value: buyIn}(
+        leagueId = leagueTreasury.createLeague(
             LEAGUE_NAME,
             _espn(),
             reporter,
@@ -168,44 +180,10 @@ contract LeagueTreasuryTest is Test {
         ranking[0] = COMMISSIONER_TEAM;
         for (uint32 i = 2; i <= teamCount; i++) {
             address m = _fm(i);
-            vm.deal(m, buyIn);
+            _fund(m, buyIn);
             vm.prank(m);
-            leagueTreasury.joinLeague{value: buyIn}(leagueId, i);
+            leagueTreasury.joinLeague(leagueId, i);
             ranking[i - 1] = i;
-        }
-        _submit(leagueId, ranking);
-        vm.warp(block.timestamp + leagueTreasury.CHALLENGE_WINDOW());
-        leagueTreasury.finalize(leagueId);
-    }
-
-    /// Joins all teams except the last, then has `wallet` join with the last team.
-    /// Returns the league after standings are finalized, with the wallet in `place`.
-    function _finalizedLeagueWithContractMember(address wallet, bool isReentrant, uint32 place)
-        internal
-        returns (uint256 leagueId)
-    {
-        leagueId = _createLeague();
-        for (uint32 i = 2; i < TEAM_COUNT; i++) {
-            address member = _member(i);
-            vm.deal(member, STARTING_BALANCE);
-            _join(member, leagueId, i);
-        }
-        vm.deal(address(this), BUY_IN);
-        if (isReentrant) {
-            ReentrantWallet(payable(wallet)).join{value: BUY_IN}(leagueId, TEAM_COUNT);
-        } else {
-            RejectingWallet(wallet).join{value: BUY_IN}(leagueId, TEAM_COUNT);
-        }
-
-        // put the contract wallet's team (TEAM_COUNT) in `place`
-        uint32[] memory ranking = new uint32[](TEAM_COUNT);
-        uint32 next = 1;
-        for (uint32 pos = 1; pos <= TEAM_COUNT; pos++) {
-            if (pos == place) {
-                ranking[pos - 1] = TEAM_COUNT;
-            } else {
-                ranking[pos - 1] = next++;
-            }
         }
         _submit(leagueId, ranking);
         vm.warp(block.timestamp + leagueTreasury.CHALLENGE_WINDOW());
@@ -217,10 +195,10 @@ contract LeagueTreasuryTest is Test {
     }
 
     function _refund(address who, uint256 leagueId) internal returns (uint256 received) {
-        uint256 before = who.balance;
+        uint256 before = usdc.balanceOf(who);
         vm.prank(who);
         leagueTreasury.withdrawRefund(leagueId);
-        received = who.balance - before;
+        received = usdc.balanceOf(who) - before;
     }
 
     function _state(uint256 leagueId) internal view returns (LeagueTreasury.LeagueState state) {
@@ -232,10 +210,24 @@ contract LeagueTreasuryTest is Test {
     }
 
     function setUp() public {
-        leagueTreasury = new LeagueTreasury();
-        vm.deal(commissioner, 10_000 ether);
-        vm.deal(alice, STARTING_BALANCE);
-        vm.deal(bob, STARTING_BALANCE);
+        usdc = new MockUSDC();
+        leagueTreasury = new LeagueTreasury(usdc);
+        _fund(commissioner, 1_000_000e6);
+        _fund(alice, STARTING_BALANCE);
+        _fund(bob, STARTING_BALANCE);
+    }
+
+    /*//////////////////////////////////////////////////////////////
+                               constructor
+    //////////////////////////////////////////////////////////////*/
+
+    function test_Constructor_StoresToken() public view {
+        assertEq(address(leagueTreasury.usdc()), address(usdc));
+    }
+
+    function test_RevertWhen_TokenIsZeroAddress() public {
+        vm.expectRevert(LeagueTreasury.LeagueTreasury__InvalidToken.selector);
+        new LeagueTreasury(IERC20(address(0)));
     }
 
     /*//////////////////////////////////////////////////////////////
@@ -315,7 +307,7 @@ contract LeagueTreasuryTest is Test {
 
         vm.expectRevert(abi.encodeWithSelector(LeagueTreasury.LeagueTreasury__InvalidTeamCount.selector, 1));
         vm.prank(commissioner);
-        leagueTreasury.createLeague{value: BUY_IN}(
+        leagueTreasury.createLeague(
             LEAGUE_NAME,
             _espn(),
             reporter,
@@ -337,7 +329,7 @@ contract LeagueTreasuryTest is Test {
             )
         );
         vm.prank(commissioner);
-        leagueTreasury.createLeague{value: BUY_IN}(
+        leagueTreasury.createLeague(
             LEAGUE_NAME,
             _espn(),
             reporter,
@@ -355,7 +347,7 @@ contract LeagueTreasuryTest is Test {
 
         vm.expectRevert(abi.encodeWithSelector(LeagueTreasury.LeagueTreasury__InvalidBuyIn.selector, 0));
         vm.prank(commissioner);
-        leagueTreasury.createLeague{value: BUY_IN}(
+        leagueTreasury.createLeague(
             LEAGUE_NAME,
             _espn(),
             reporter,
@@ -373,7 +365,7 @@ contract LeagueTreasuryTest is Test {
 
         vm.expectRevert(abi.encodeWithSelector(LeagueTreasury.LeagueTreasury__InvalidReporter.selector, address(0)));
         vm.prank(commissioner);
-        leagueTreasury.createLeague{value: BUY_IN}(
+        leagueTreasury.createLeague(
             LEAGUE_NAME,
             _espn(),
             address(0),
@@ -394,7 +386,7 @@ contract LeagueTreasuryTest is Test {
             abi.encodeWithSelector(LeagueTreasury.LeagueTreasury__InvalidJoinDeadline.selector, joinDeadline)
         );
         vm.prank(commissioner);
-        leagueTreasury.createLeague{value: BUY_IN}(
+        leagueTreasury.createLeague(
             LEAGUE_NAME,
             _espn(),
             reporter,
@@ -418,7 +410,7 @@ contract LeagueTreasuryTest is Test {
             )
         );
         vm.prank(commissioner);
-        leagueTreasury.createLeague{value: BUY_IN}(
+        leagueTreasury.createLeague(
             LEAGUE_NAME,
             _espn(),
             reporter,
@@ -439,7 +431,7 @@ contract LeagueTreasuryTest is Test {
             abi.encodeWithSelector(LeagueTreasury.LeagueTreasury__InvalidStandingsDeadline.selector, deadline, deadline)
         );
         vm.prank(commissioner);
-        leagueTreasury.createLeague{value: BUY_IN}(
+        leagueTreasury.createLeague(
             LEAGUE_NAME, _espn(), reporter, BUY_IN, TEAM_COUNT, deadline, deadline, payout, COMMISSIONER_TEAM
         );
     }
@@ -452,7 +444,7 @@ contract LeagueTreasuryTest is Test {
 
         vm.expectRevert(abi.encodeWithSelector(LeagueTreasury.LeagueTreasury__InvalidPayoutTotal.selector, TEAM_COUNT));
         vm.prank(commissioner);
-        leagueTreasury.createLeague{value: BUY_IN}(
+        leagueTreasury.createLeague(
             LEAGUE_NAME,
             _espn(),
             reporter,
@@ -471,7 +463,7 @@ contract LeagueTreasuryTest is Test {
 
         vm.expectRevert(abi.encodeWithSelector(LeagueTreasury.LeagueTreasury__InvalidPayoutTotal.selector, 9999));
         vm.prank(commissioner);
-        leagueTreasury.createLeague{value: BUY_IN}(
+        leagueTreasury.createLeague(
             LEAGUE_NAME,
             _espn(),
             reporter,
@@ -495,7 +487,7 @@ contract LeagueTreasuryTest is Test {
         assertEq(teamId, COMMISSIONER_TEAM);
         assertTrue(joined);
         assertEq(leagueTreasury.teamOwners(leagueId, COMMISSIONER_TEAM), commissioner);
-        assertEq(address(leagueTreasury).balance, BUY_IN);
+        assertEq(usdc.balanceOf(address(leagueTreasury)), BUY_IN);
     }
 
     function test_CreateLeague_EmitsMemberJoinedForCommissioner() public {
@@ -506,7 +498,7 @@ contract LeagueTreasuryTest is Test {
 
     function test_CreateLeague_CommissionerCanPickAnyTeamId() public {
         vm.prank(commissioner);
-        uint256 leagueId = leagueTreasury.createLeague{value: BUY_IN}(
+        uint256 leagueId = leagueTreasury.createLeague(
             LEAGUE_NAME,
             _espn(),
             reporter,
@@ -520,10 +512,14 @@ contract LeagueTreasuryTest is Test {
         assertEq(leagueTreasury.teamOwners(leagueId, 7), commissioner);
     }
 
-    function test_RevertWhen_CreatingWithoutBuyIn() public {
+    function test_RevertWhen_CreatingWithoutApproval() public {
         uint16[] memory payout = _linearPayout(TEAM_COUNT);
+        vm.prank(commissioner);
+        usdc.approve(address(leagueTreasury), 0); // take back the approval _fund gave
 
-        vm.expectRevert(abi.encodeWithSelector(LeagueTreasury.LeagueTreasury__IncorrectBuyIn.selector, 0, BUY_IN));
+        vm.expectRevert(
+            abi.encodeWithSelector(IERC20Errors.ERC20InsufficientAllowance.selector, address(leagueTreasury), 0, BUY_IN)
+        );
         vm.prank(commissioner);
         leagueTreasury.createLeague(
             LEAGUE_NAME,
@@ -543,7 +539,7 @@ contract LeagueTreasuryTest is Test {
 
         vm.expectRevert(abi.encodeWithSelector(LeagueTreasury.LeagueTreasury__InvalidTeamId.selector, 0));
         vm.prank(commissioner);
-        leagueTreasury.createLeague{value: BUY_IN}(
+        leagueTreasury.createLeague(
             LEAGUE_NAME,
             _espn(),
             reporter,
@@ -563,7 +559,7 @@ contract LeagueTreasuryTest is Test {
             abi.encodeWithSelector(LeagueTreasury.LeagueTreasury__ReporterCannotPlay.selector, commissioner)
         );
         vm.prank(commissioner);
-        leagueTreasury.createLeague{value: BUY_IN}(
+        leagueTreasury.createLeague(
             LEAGUE_NAME,
             _espn(),
             commissioner,
@@ -578,7 +574,7 @@ contract LeagueTreasuryTest is Test {
 
     function test_RevertWhen_ReporterJoins() public {
         uint256 leagueId = _createLeague();
-        vm.deal(reporter, STARTING_BALANCE);
+        _fund(reporter, STARTING_BALANCE);
 
         vm.expectRevert(abi.encodeWithSelector(LeagueTreasury.LeagueTreasury__ReporterCannotPlay.selector, reporter));
         _join(reporter, leagueId, 2);
@@ -611,8 +607,8 @@ contract LeagueTreasuryTest is Test {
         uint256 leagueId = _createLeague();
         _join(alice, leagueId, 2);
 
-        assertEq(address(leagueTreasury).balance, 2 * BUY_IN); // commissioner + alice
-        assertEq(alice.balance, STARTING_BALANCE - BUY_IN);
+        assertEq(usdc.balanceOf(address(leagueTreasury)), 2 * BUY_IN); // commissioner + alice
+        assertEq(usdc.balanceOf(alice), STARTING_BALANCE - BUY_IN);
     }
 
     function test_JoinLeague_IncrementsMemberCount() public {
@@ -630,7 +626,7 @@ contract LeagueTreasuryTest is Test {
 
         assertEq(_memberCount(leagueId), TEAM_COUNT);
         assertEq(uint8(_state(leagueId)), uint8(LeagueTreasury.LeagueState.ACTIVE));
-        assertEq(address(leagueTreasury).balance, BUY_IN * TEAM_COUNT);
+        assertEq(usdc.balanceOf(address(leagueTreasury)), BUY_IN * TEAM_COUNT);
     }
 
     function test_JoinLeague_EmitsMemberJoined() public {
@@ -647,7 +643,7 @@ contract LeagueTreasuryTest is Test {
         // fill every slot except the last one
         for (uint32 i = 2; i < TEAM_COUNT; i++) {
             address member = _member(i);
-            vm.deal(member, STARTING_BALANCE);
+            _fund(member, STARTING_BALANCE);
             _join(member, leagueId, i);
         }
 
@@ -703,24 +699,53 @@ contract LeagueTreasuryTest is Test {
         _join(bob, leagueId, 2);
     }
 
-    function test_RevertWhen_BuyInTooLow() public {
+    function test_RevertWhen_AllowanceTooLow() public {
         uint256 leagueId = _createLeague();
+        vm.prank(alice);
+        usdc.approve(address(leagueTreasury), BUY_IN - 1);
 
         vm.expectRevert(
-            abi.encodeWithSelector(LeagueTreasury.LeagueTreasury__IncorrectBuyIn.selector, BUY_IN - 1, BUY_IN)
+            abi.encodeWithSelector(
+                IERC20Errors.ERC20InsufficientAllowance.selector, address(leagueTreasury), BUY_IN - 1, BUY_IN
+            )
         );
         vm.prank(alice);
-        leagueTreasury.joinLeague{value: BUY_IN - 1}(leagueId, 2);
+        leagueTreasury.joinLeague(leagueId, 2);
     }
 
-    function test_RevertWhen_BuyInTooHigh() public {
+    /// The treasury decides how much to pull, so a bigger allowance never means a bigger buy-in.
+    function test_JoinLeague_TakesExactlyBuyInWithLargerAllowance() public {
         uint256 leagueId = _createLeague();
+        vm.prank(alice);
+        usdc.approve(address(leagueTreasury), BUY_IN + 1);
+
+        _join(alice, leagueId, 2);
+
+        assertEq(usdc.balanceOf(alice), STARTING_BALANCE - BUY_IN);
+        assertEq(usdc.allowance(alice, address(leagueTreasury)), 1); // the extra unit is left unspent
+    }
+
+    function test_RevertWhen_BalanceTooLow() public {
+        uint256 leagueId = _createLeague();
+        address carol = makeAddr("carol");
+        _fund(carol, BUY_IN - 1);
 
         vm.expectRevert(
-            abi.encodeWithSelector(LeagueTreasury.LeagueTreasury__IncorrectBuyIn.selector, BUY_IN + 1, BUY_IN)
+            abi.encodeWithSelector(IERC20Errors.ERC20InsufficientBalance.selector, carol, BUY_IN - 1, BUY_IN)
         );
+        _join(carol, leagueId, 2);
+    }
+
+    /// Buy-ins are USDC only. ETH sent with a join would be stuck forever, so it must be rejected.
+    function test_RevertWhen_SendingEthToJoin() public {
+        uint256 leagueId = _createLeague();
+        vm.deal(alice, 1 ether);
+
         vm.prank(alice);
-        leagueTreasury.joinLeague{value: BUY_IN + 1}(leagueId, 2);
+        (bool ok,) =
+            address(leagueTreasury).call{value: 1 ether}(abi.encodeCall(LeagueTreasury.joinLeague, (leagueId, 2)));
+        assertFalse(ok);
+        assertEq(address(leagueTreasury).balance, 0);
     }
 
     function test_RevertWhen_MemberJoinsTwice() public {
@@ -1488,7 +1513,7 @@ contract LeagueTreasuryTest is Test {
             totalPaid += _claim(_member(i), leagueId);
         }
         assertEq(totalPaid, BUY_IN * TEAM_COUNT);
-        assertEq(address(leagueTreasury).balance, 0);
+        assertEq(usdc.balanceOf(address(leagueTreasury)), 0);
     }
 
     function test_Claim_OnlyAffectsOneLeague() public {
@@ -1501,7 +1526,7 @@ contract LeagueTreasuryTest is Test {
             _claim(_member(i), leagueA);
         }
         // the commissioner's and alice's buy-ins in league B are untouched
-        assertEq(address(leagueTreasury).balance, 2 * BUY_IN);
+        assertEq(usdc.balanceOf(address(leagueTreasury)), 2 * BUY_IN);
     }
 
     function test_RevertWhen_NonMemberClaims() public {
@@ -1548,45 +1573,36 @@ contract LeagueTreasuryTest is Test {
                     claim: wallets that misbehave
     //////////////////////////////////////////////////////////////*/
 
-    function test_RevertWhen_WalletRejectsEth() public {
-        RejectingWallet wallet = new RejectingWallet(leagueTreasury);
-        uint256 leagueId = _finalizedLeagueWithContractMember(address(wallet), false, 1);
-        uint256 payout = leagueTreasury.getPayout(leagueId, address(wallet));
+    /// Circle can freeze any address. A frozen winner's claim fails, but the
+    /// revert undoes `claimed = true`, so the payout stays owed to them.
+    function test_RevertWhen_WinnerIsBlocklisted() public {
+        uint256 leagueId = _finalizedLeague();
+        address winner = _member(1);
+        usdc.setBlocked(winner, true);
 
-        vm.expectRevert(
-            abi.encodeWithSelector(LeagueTreasury.LeagueTreasury__TransferFailed.selector, address(wallet), payout)
-        );
-        wallet.claim(leagueId);
+        vm.expectRevert(abi.encodeWithSelector(MockUSDC.MockUSDC__Blocked.selector, winner));
+        vm.prank(winner);
+        leagueTreasury.claim(leagueId);
 
-        // the revert undid claimed = true, so the payout is still owed
-        assertFalse(_claimed(leagueId, address(wallet)));
+        assertFalse(_claimed(leagueId, winner));
     }
 
-    function test_RejectingWalletDoesNotBlockOthers() public {
-        RejectingWallet wallet = new RejectingWallet(leagueTreasury);
-        uint256 leagueId = _finalizedLeagueWithContractMember(address(wallet), false, 1);
+    /// Pull pattern: one frozen member can't hold everyone else's payout hostage.
+    function test_BlocklistedMemberDoesNotBlockOthers() public {
+        uint256 leagueId = _finalizedLeague();
+        address winner = _member(1);
+        usdc.setBlocked(winner, true);
 
-        // every other member can still claim (pull pattern)
-        for (uint32 i = 1; i < TEAM_COUNT; i++) {
+        for (uint32 i = 2; i <= TEAM_COUNT; i++) {
             assertGt(_claim(_member(i), leagueId), 0);
         }
-        // only the rejecting wallet's own payout remains
-        assertEq(address(leagueTreasury).balance, leagueTreasury.getPayout(leagueId, address(wallet)));
-    }
+        // only the frozen winner's payout is left
+        assertEq(usdc.balanceOf(address(leagueTreasury)), leagueTreasury.getPayout(leagueId, winner));
 
-    function test_ReentrancyCannotDoubleClaim() public {
-        ReentrantWallet attacker = new ReentrantWallet(leagueTreasury);
-        uint256 leagueId = _finalizedLeagueWithContractMember(address(attacker), true, 1);
-        uint256 payout = leagueTreasury.getPayout(leagueId, address(attacker));
-        uint256 contractBefore = address(leagueTreasury).balance;
-
-        attacker.claim();
-
-        assertTrue(attacker.reentryAttempted());
-        assertFalse(attacker.reentrySucceeded()); // second claim was blocked
-        assertEq(attacker.timesPaid(), 1);
-        assertEq(address(attacker).balance, payout);
-        assertEq(address(leagueTreasury).balance, contractBefore - payout);
+        // once unfrozen, they can still collect it
+        usdc.setBlocked(winner, false);
+        _claim(winner, leagueId);
+        assertEq(usdc.balanceOf(address(leagueTreasury)), 0);
     }
 
     /*//////////////////////////////////////////////////////////////
@@ -1596,7 +1612,7 @@ contract LeagueTreasuryTest is Test {
     /// For any buy-in and league size, every member claiming pays out
     /// exactly the pot and leaves the contract empty.
     function testFuzz_PayoutsSumExactlyToPot(uint256 buyIn, uint8 teamCount) public {
-        buyIn = bound(buyIn, 1, 1_000 ether);
+        buyIn = bound(buyIn, 1, 1_000_000e6);
         teamCount = uint8(bound(teamCount, 2, 20));
 
         uint256 leagueId = _runFullLeague(teamCount, buyIn);
@@ -1606,12 +1622,12 @@ contract LeagueTreasuryTest is Test {
             totalPaid += _claim(_fm(i), leagueId);
         }
         assertEq(totalPaid, buyIn * teamCount);
-        assertEq(address(leagueTreasury).balance, 0);
+        assertEq(usdc.balanceOf(address(leagueTreasury)), 0);
     }
 
     /// Payouts never increase as finishing place gets worse.
     function testFuzz_BetterPlaceNeverPaysLess(uint256 buyIn) public {
-        buyIn = bound(buyIn, 1, 1_000 ether);
+        buyIn = bound(buyIn, 1, 1_000_000e6);
         uint256 leagueId = _runFullLeague(TEAM_COUNT, buyIn);
 
         for (uint32 place = 1; place < TEAM_COUNT; place++) {
@@ -1736,7 +1752,7 @@ contract LeagueTreasuryTest is Test {
         assertEq(_refund(commissioner, leagueId), BUY_IN);
         assertEq(_refund(alice, leagueId), BUY_IN);
         assertEq(_refund(bob, leagueId), BUY_IN);
-        assertEq(address(leagueTreasury).balance, 0);
+        assertEq(usdc.balanceOf(address(leagueTreasury)), 0);
     }
 
     function test_Refund_AfterCommissionerCancels() public {
@@ -1746,7 +1762,7 @@ contract LeagueTreasuryTest is Test {
         leagueTreasury.cancelLeague(leagueId);
 
         assertEq(_refund(alice, leagueId), BUY_IN);
-        assertEq(alice.balance, STARTING_BALANCE);
+        assertEq(usdc.balanceOf(alice), STARTING_BALANCE);
     }
 
     function test_Refund_ReporterNeverSubmits() public {
@@ -1756,7 +1772,7 @@ contract LeagueTreasuryTest is Test {
         for (uint32 i = 1; i <= TEAM_COUNT; i++) {
             assertEq(_refund(_member(i), leagueId), BUY_IN);
         }
-        assertEq(address(leagueTreasury).balance, 0);
+        assertEq(usdc.balanceOf(address(leagueTreasury)), 0);
     }
 
     function test_Refund_DisputeNeverResolved() public {
@@ -1766,7 +1782,7 @@ contract LeagueTreasuryTest is Test {
         for (uint32 i = 1; i <= TEAM_COUNT; i++) {
             assertEq(_refund(_member(i), leagueId), BUY_IN);
         }
-        assertEq(address(leagueTreasury).balance, 0);
+        assertEq(usdc.balanceOf(address(leagueTreasury)), 0);
     }
 
     function test_Refund_FirstRefundCancelsLeague() public {
@@ -1890,12 +1906,14 @@ contract LeagueTreasuryTest is Test {
     /// However many members joined and whatever the buy-in, refunding everyone
     /// returns exactly what they paid and empties the contract.
     function testFuzz_RefundsReturnExactlyWhatWasPaid(uint256 buyIn, uint8 joined) public {
-        buyIn = bound(buyIn, 1, 1_000 ether);
+        buyIn = bound(buyIn, 1, 1_000_000e6);
         joined = uint8(bound(joined, 1, TEAM_COUNT - 1)); // league never fills (commissioner included)
 
-        vm.deal(commissioner, buyIn);
+        // mint adds to a balance (vm.deal set it), and the commissioner already has USDC from setUp
+        uint256 commissionerStart = usdc.balanceOf(commissioner) + buyIn;
+        _fund(commissioner, buyIn);
         vm.prank(commissioner);
-        uint256 leagueId = leagueTreasury.createLeague{value: buyIn}(
+        uint256 leagueId = leagueTreasury.createLeague(
             LEAGUE_NAME,
             _espn(),
             reporter,
@@ -1908,18 +1926,18 @@ contract LeagueTreasuryTest is Test {
         );
         for (uint32 i = 2; i <= joined; i++) {
             address m = _fm(i);
-            vm.deal(m, buyIn);
+            _fund(m, buyIn);
             vm.prank(m);
-            leagueTreasury.joinLeague{value: buyIn}(leagueId, i);
+            leagueTreasury.joinLeague(leagueId, i);
         }
         vm.warp(block.timestamp + 1 days);
 
         for (uint32 i = 1; i <= joined; i++) {
             address m = _fm(i);
             assertEq(_refund(m, leagueId), buyIn);
-            assertEq(m.balance, buyIn);
+            assertEq(usdc.balanceOf(m), m == commissioner ? commissionerStart : buyIn);
         }
-        assertEq(address(leagueTreasury).balance, 0);
+        assertEq(usdc.balanceOf(address(leagueTreasury)), 0);
     }
 
     /*//////////////////////////////////////////////////////////////
@@ -1929,7 +1947,7 @@ contract LeagueTreasuryTest is Test {
     function _createLeagueNamed(string memory name) internal returns (uint256) {
         uint16[] memory payout = _linearPayout(TEAM_COUNT);
         vm.prank(commissioner);
-        return leagueTreasury.createLeague{value: BUY_IN}(
+        return leagueTreasury.createLeague(
             name,
             _espn(),
             reporter,
@@ -1971,7 +1989,7 @@ contract LeagueTreasuryTest is Test {
 
     function _createLeagueWithEspn(LeagueTreasury.EspnLink memory espn) external returns (uint256) {
         vm.prank(commissioner);
-        return leagueTreasury.createLeague{value: BUY_IN}(
+        return leagueTreasury.createLeague(
             LEAGUE_NAME,
             espn,
             reporter,
@@ -2030,7 +2048,7 @@ contract LeagueTreasuryTest is Test {
             COMMISSIONER_TEAM
         );
         vm.prank(commissioner);
-        (bool ok,) = address(leagueTreasury).call{value: BUY_IN}(data);
+        (bool ok,) = address(leagueTreasury).call(data);
         assertFalse(ok);
     }
 

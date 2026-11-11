@@ -1,6 +1,11 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.24;
 
+import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
+import {SafeERC20} from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
+
+using SafeERC20 for IERC20;
+
 contract LeagueTreasury {
     /*//////////////////////////////////////////////////////////////
                                  ERRORS
@@ -19,7 +24,6 @@ contract LeagueTreasury {
     error LeagueTreasury__JoinDeadlinePassed(uint256 leagueId, uint64 joinDeadline);
     error LeagueTreasury__InvalidTeamId(uint32 teamId);
     error LeagueTreasury__TeamAlreadyTaken(uint256 leagueId, uint32 teamId);
-    error LeagueTreasury__IncorrectBuyIn(uint256 sent, uint256 required);
     error LeagueTreasury__MemberAlreadyJoined(uint256 leagueId, address member);
     error LeagueTreasury__InvalidState(uint256 leagueId, LeagueState expected, LeagueState actual);
     error LeagueTreasury__NotReporter(address caller);
@@ -31,13 +35,14 @@ contract LeagueTreasury {
     error LeagueTreasury__ChallengeWindowClosed(uint256 leagueId, uint256 closedAt);
     error LeagueTreasury__ChallengeWindowOpen(uint256 leagueId, uint256 closesAt);
     error LeagueTreasury__AlreadyClaimed(uint256 leagueId, address member);
-    error LeagueTreasury__TransferFailed(address recipient, uint256 amount);
     error LeagueTreasury__NotRefundable(uint256 leagueId, LeagueState state);
     error LeagueTreasury__DisputeResolutionWindowClosed(uint256 leagueId, uint256 closedAt);
     error LeagueTreasury__ReporterCannotPlay(address reporter);
     error LeagueTreasury__InvalidEspnLeague(uint64 espnLeagueId, uint16 season);
     error LeagueTreasury__ProposalNotFound(uint256 leagueId, uint256 proposalId);
     error LeagueTreasury__AlreadyApproved(uint256 leagueId, uint256 proposalId, address member);
+
+    error LeagueTreasury__InvalidToken();
 
     /*//////////////////////////////////////////////////////////////
                            TYPE DECLARATIONS
@@ -122,6 +127,8 @@ contract LeagueTreasury {
     mapping(uint256 => mapping(uint256 => uint32[])) internal proposalRankings;
     mapping(uint256 => mapping(uint256 => mapping(address => bool))) public hasApproved;
 
+    IERC20 public immutable usdc;
+
     /*//////////////////////////////////////////////////////////////
                                  EVENTS
     //////////////////////////////////////////////////////////////*/
@@ -181,6 +188,17 @@ contract LeagueTreasury {
     }
 
     /*//////////////////////////////////////////////////////////////
+                               CONSTRUCTORS
+    //////////////////////////////////////////////////////////////*/
+
+    constructor(IERC20 _usdc) {
+        if (address(_usdc) == address(0)) {
+            revert LeagueTreasury__InvalidToken();
+        }
+        usdc = _usdc;
+    }
+
+    /*//////////////////////////////////////////////////////////////
                                FUNCTIONS
     //////////////////////////////////////////////////////////////*/
 
@@ -194,7 +212,7 @@ contract LeagueTreasury {
         uint64 standingsDeadline,
         uint16[] calldata payout,
         uint32 commissionerTeamId
-    ) external payable returns (uint256 leagueId) {
+    ) external returns (uint256 leagueId) {
         // Validation, storage and the event live in internal helpers. Doing it all
         // inline needs more variables than the EVM's stack allows ("stack too deep").
         if (espn.leagueId == 0 || espn.season == 0) {
@@ -292,7 +310,7 @@ contract LeagueTreasury {
         payoutBps[leagueId] = payout;
     }
 
-    function joinLeague(uint256 leagueId, uint32 teamId) external payable leagueExists(leagueId) {
+    function joinLeague(uint256 leagueId, uint32 teamId) external leagueExists(leagueId) {
         League storage league = leagues[leagueId];
         if (league.state != LeagueState.OPEN) {
             revert LeagueTreasury__LeagueNotOpen(leagueId, league.state);
@@ -315,9 +333,6 @@ contract LeagueTreasury {
         if (teamOwners[leagueId][teamId] != address(0)) {
             revert LeagueTreasury__TeamAlreadyTaken(leagueId, teamId);
         }
-        if (msg.value != league.buyIn) {
-            revert LeagueTreasury__IncorrectBuyIn(msg.value, league.buyIn);
-        }
         Member storage member = members[leagueId][msg.sender];
         if (member.joined) {
             revert LeagueTreasury__MemberAlreadyJoined(leagueId, msg.sender);
@@ -334,6 +349,8 @@ contract LeagueTreasury {
             league.state = LeagueState.ACTIVE;
             emit LeagueActivated(leagueId);
         }
+
+        usdc.safeTransferFrom(msg.sender, address(this), league.buyIn);
 
         emit MemberJoined(leagueId, msg.sender, teamId);
     }
@@ -530,10 +547,7 @@ contract LeagueTreasury {
         emit PayoutClaimed(leagueId, msg.sender, payout);
 
         if (payout > 0) {
-            (bool success,) = payable(msg.sender).call{value: payout}("");
-            if (!success) {
-                revert LeagueTreasury__TransferFailed(msg.sender, payout);
-            }
+            usdc.safeTransfer(msg.sender, payout);
         }
     }
 
@@ -570,10 +584,7 @@ contract LeagueTreasury {
         uint256 amount = league.buyIn;
         emit RefundWithdrawn(leagueId, msg.sender, amount);
 
-        (bool success,) = payable(msg.sender).call{value: amount}("");
-        if (!success) {
-            revert LeagueTreasury__TransferFailed(msg.sender, amount);
-        }
+        usdc.safeTransfer(msg.sender, amount);
     }
 
     /*//////////////////////////////////////////////////////////////
