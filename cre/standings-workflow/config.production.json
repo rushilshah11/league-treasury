@@ -1,0 +1,11 @@
+{
+  "schedule": "0 0 9 * * *",
+  "espnLeagueId": "584507129",
+  "sport": "fba",
+  "season": "2027",
+  "allowNonFinal": false,
+  "chainName": "ethereum-testnet-sepolia-base-1",
+  "receiverAddress": "0x0000000000000000000000000000000000000000",
+  "leagueId": "0",
+  "gasLimit": "500000"
+}

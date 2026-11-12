@@ -1,6 +1,6 @@
 -include .env
 
-.PHONY: all build test test-v coverage fmt snapshot anvil deploy-anvil deploy-sepolia deploy-base-sepolia deployment-info clean abi frontend-install dev dev-wallet report
+.PHONY: all build test test-v coverage fmt snapshot anvil deploy-anvil deploy-sepolia deploy-base-sepolia deploy-cre-receiver deployment-info clean abi frontend-install dev dev-wallet report
 
 # Anvil's default account 0. This key is public and only valid on a local Anvil chain.
 # Never use it, or any key, on a real network from this file.
@@ -57,6 +57,13 @@ deploy-base-sepolia:
 		--account $(DEPLOYER_ACCOUNT) --sender $(DEPLOYER_ADDRESS) --broadcast \
 		--verify --etherscan-api-key $(ETHERSCAN_API_KEY)
 	@cd frontend && node scripts/deployment-info.mjs 84532
+
+# Deploy the Chainlink CRE receiver on Base Sepolia. It needs TREASURY_ADDRESS and DEPLOYER_ADDRESS in .env.
+# Set CRE_FORWARDER to use the production forwarder instead of the simulation one.
+deploy-cre-receiver:
+	forge script script/DeployCreStandingsReceiver.s.sol --rpc-url $(BASE_SEPOLIA_RPC_URL) \
+		--account $(DEPLOYER_ACCOUNT) --sender $(DEPLOYER_ADDRESS) --broadcast \
+		--verify --etherscan-api-key $(ETHERSCAN_API_KEY)
 
 # Print the contract address and deploy block for the app and the bot.
 deployment-info:
