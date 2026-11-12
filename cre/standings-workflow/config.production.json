@@ -5,6 +5,7 @@
   "season": "2027",
   "allowNonFinal": false,
   "chainName": "ethereum-testnet-sepolia-base-1",
+  "treasuryAddress": "0x2711e4e095f4fddee31f3ae7125acc4521c6d2ad",
   "receiverAddress": "0x0000000000000000000000000000000000000000",
   "leagueId": "0",
   "gasLimit": "500000"

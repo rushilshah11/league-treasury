@@ -7,11 +7,21 @@ import {
   getNetwork,
   hexToBase64,
   bytesToHex,
+  encodeCallMsg,
+  LAST_FINALIZED_BLOCK_NUMBER,
   type Runtime,
   type NodeRuntime,
   Runner,
 } from "@chainlink/cre-sdk";
-import { encodeAbiParameters, parseAbiParameters } from "viem";
+import {
+  type Address,
+  decodeFunctionResult,
+  encodeAbiParameters,
+  encodeFunctionData,
+  parseAbi,
+  parseAbiParameters,
+  zeroAddress,
+} from "viem";
 
 export type Config = {
   schedule: string;
@@ -20,6 +30,7 @@ export type Config = {
   season: string; // e.g. "2027"
   allowNonFinal: boolean; // simulation only: accept in-progress standings
   chainName: string; // the chain the treasury is on, in Chainlink's naming
+  treasuryAddress: string; // the LeagueTreasury, read to see which teams joined
   receiverAddress: string; // our CreStandingsReceiver contract
   leagueId: string; // the league's ID in LeagueTreasury (not ESPN's ID)
   gasLimit: string; // gas for the write, as a string
@@ -72,10 +83,45 @@ const fetchRanking = (nodeRuntime: NodeRuntime<Config>): string => {
   return teams.map((t) => t.id).join(",");
 };
 
-// Runs once per trigger. Three moves:
+// Just the one function we need from the treasury, written as text.
+const treasuryAbi = parseAbi([
+  "function getMembers(uint256 leagueId) view returns (address[] addresses, (uint32 teamId, bool joined, bool claimed, uint8 finalPlace)[] records)",
+]);
+
+// Reads the teams that joined this league from the treasury contract. Runs once for the
+// whole network (not per node): the nodes read the same finalized block and agree.
+const readJoinedTeamIds = (runtime: Runtime<Config>, evmClient: EVMClient): Set<number> => {
+  const callData = encodeFunctionData({
+    abi: treasuryAbi,
+    functionName: "getMembers",
+    args: [BigInt(runtime.config.leagueId)],
+  });
+
+  const reply = evmClient
+    .callContract(runtime, {
+      call: encodeCallMsg({
+        from: zeroAddress,
+        to: runtime.config.treasuryAddress as Address,
+        data: callData,
+      }),
+      // Only read data the chain has finalized, so a reorg can't change the answer.
+      blockNumber: LAST_FINALIZED_BLOCK_NUMBER,
+    })
+    .result();
+
+  const [, records] = decodeFunctionResult({
+    abi: treasuryAbi,
+    functionName: "getMembers",
+    data: bytesToHex(reply.data),
+  });
+  return new Set(records.map((member) => Number(member.teamId)));
+};
+
+// Runs once per trigger. Four moves:
 //   1. every node fetches ESPN and the network agrees on the ranking
-//   2. the agreed ranking is packed into a report and signed by the network
-//   3. the signed report is sent to our receiver contract through the forwarder
+//   2. read which teams joined the league from the treasury, and keep only those
+//   3. the ranking is packed into a report and signed by the network
+//   4. the signed report is sent to our receiver contract through the forwarder
 const onCronTrigger = (runtime: Runtime<Config>): string => {
   // Move 1: hand fetchRanking to every node; a majority must return the same string.
   const ranking = runtime
@@ -88,9 +134,24 @@ const onCronTrigger = (runtime: Runtime<Config>): string => {
     throw new Error("Set receiverAddress in the config to the deployed CreStandingsReceiver");
   }
 
-  // Move 2: pack (leagueId, ranking) the way the receiver's abi.decode expects,
+  // Move 2: ESPN ranks every team in its league, but the contract only accepts the teams
+  // that joined (the bot does the same filtering). Ask the treasury who joined.
+  const network = getNetwork({ chainFamily: "evm", chainSelectorName: chainName, isTestnet: true });
+  if (!network) throw new Error(`Unknown chain: ${chainName}`);
+  const evmClient = new EVMClient(network.chainSelector.selector);
+
+  const joined = readJoinedTeamIds(runtime, evmClient);
+  const teamIds = ranking
+    .split(",")
+    .map((id) => Number(id))
+    .filter((id) => joined.has(id));
+  if (teamIds.length !== joined.size) {
+    throw new Error(`ESPN is missing a joined team: ${teamIds.length} matched, ${joined.size} joined`);
+  }
+  runtime.log(`Teams that joined league ${leagueId}, in finishing order: ${teamIds.join(",")}`);
+
+  // Move 3: pack (leagueId, ranking) the way the receiver's abi.decode expects,
   // then ask the network to sign it. The types and order must match the contract.
-  const teamIds = ranking.split(",").map((id) => Number(id));
   const payload = encodeAbiParameters(parseAbiParameters("uint256 leagueId, uint32[] ranking"), [
     BigInt(leagueId),
     teamIds,
@@ -104,11 +165,7 @@ const onCronTrigger = (runtime: Runtime<Config>): string => {
     })
     .result();
 
-  // Move 3: send the signed report to our receiver on the treasury's chain.
-  const network = getNetwork({ chainFamily: "evm", chainSelectorName: chainName, isTestnet: true });
-  if (!network) throw new Error(`Unknown chain: ${chainName}`);
-  const evmClient = new EVMClient(network.chainSelector.selector);
-
+  // Move 4: send the signed report to our receiver on the treasury's chain.
   const written = evmClient
     .writeReport(runtime, {
       receiver: receiverAddress,

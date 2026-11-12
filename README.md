@@ -28,6 +28,7 @@ The point of the project is that no single person controls the money or the resu
 | The commissioner keeps the pot | Buy-ins go straight into the contract. Nothing lets anyone withdraw them except the payout and refund rules. |
 | Someone posts fake standings | Only the league's reporter, a neutral bot that copies public ESPN data, can post standings. The reporter can never have a team in the league. |
 | The bot gets it wrong | Any member can dispute within 48 hours. Members then vote on corrected standings, and a majority makes them final. The commissioner gets one vote like everyone else. |
+| One key controls the standings | A league can name `CreStandingsReceiver` as its reporter instead of the bot's wallet. Only Chainlink's forwarder can call it, and in production only reports from our own workflow are accepted. Chainlink's nodes must agree on the ranking before it reaches the chain, and the 48-hour dispute window still applies. See [Chainlink CRE](#chainlink-cre-optional-reporter). |
 | The season falls apart | If the league never fills, standings are never posted, or a dispute isn't resolved within 7 days, everyone can withdraw their full buy-in. |
 
 Payouts use the pull pattern: each member claims their own share, so one wallet that can't receive ETH never blocks the others.
@@ -53,6 +54,24 @@ Standings bot ──▶ LeagueTreasury.sol (Base Sepolia)
 - **`frontend/`:** the React app. Design tokens in `src/index.css`, shadcn/ui components, and one action card per thing a user can do, chosen from the league's state, the chain's clock and the viewer's role.
 - **`frontend/server/espn.mjs`:** reads ESPN and trims it to names, records and ranks. It runs inside the dev server locally and as a Vercel Function in production (`frontend/api/espn.mjs`).
 - **`frontend/scripts/report.mjs`:** the standings bot. It checks every league it reports for, skips each until ESPN marks the season final, then posts the ranking. `.github/workflows/standings-bot.yml` runs it daily.
+- **`src/CreStandingsReceiver.sol`:** an optional reporter that Chainlink CRE posts standings through. It forwards them to `LeagueTreasury.submitStandings`, so the treasury itself is unchanged. Covered by its own Foundry tests.
+- **`cre/`:** the Chainlink CRE workflow. Every node fetches ESPN, the network must agree on the ranking, and the signed result is sent to the receiver.
+
+## Chainlink CRE (optional reporter)
+
+By default a bot wallet posts the standings, so one key is trusted. The CRE path replaces that key with Chainlink's oracle network.
+
+**How it works:** a workflow in `cre/standings-workflow` runs on a schedule. Every node fetches the league from ESPN and returns the final ranking as a list of team IDs. The network only continues if a majority return the exact same list, and then signs it. Chainlink's forwarder contract delivers the signed report to `CreStandingsReceiver`, which calls `submitStandings` on the treasury. A league uses it by naming the receiver as its reporter when it is created.
+
+**Status:** the workflow is tested in Chainlink's simulator and the receiver is deployed and verified on Base Sepolia, with Foundry tests. Running the workflow live on Chainlink's network needs deploy approval from Chainlink, which is not in place yet. The bot remains the default reporter until then.
+
+**Production checklist** (before any league relies on it):
+
+1. Set the receiver's forwarder to the production forwarder for the chain with `setForwarder`. Simulation uses a mock forwarder that does not check signatures.
+2. Set `setExpectedWorkflowOwner` and `setExpectedWorkflowId` to our workflow's owner and ID. The forwarder delivers reports from any workflow aimed at the receiver, so without these checks anyone could post standings through it. They have to stay off while simulating, because the mock forwarder sends no workflow details.
+3. Consider calling `renounceOwnership()` once steps 1 and 2 are set. The owner can change the forwarder and turn the workflow checks off, so it is still a trusted key until ownership is renounced. The dispute window limits the damage in the meantime.
+4. Point the app's `VITE_REPORTER_ADDRESS` at the receiver so new leagues use it, and update the form text that says a bot posts the standings.
+5. Set the workflow config to require a final season (`allowNonFinal: false`) and make sure the receiver address in it is correct.
 
 ## Run it locally
 
