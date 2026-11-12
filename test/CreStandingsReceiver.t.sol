@@ -143,7 +143,9 @@ contract CreStandingsReceiverTest is Test {
         address attacker = makeAddr("attacker");
 
         vm.expectRevert(
-            abi.encodeWithSelector(CreStandingsReceiver.CreStandingsReceiver__InvalidSender.selector, attacker, forwarder)
+            abi.encodeWithSelector(
+                CreStandingsReceiver.CreStandingsReceiver__InvalidSender.selector, attacker, forwarder
+            )
         );
         vm.prank(attacker);
         receiver.onReport("", _report(leagueId, _ranking()));

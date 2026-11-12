@@ -38,7 +38,7 @@ contract CreStandingsReceiver is IReceiver, Ownable {
     // these, so only the first 62 bytes are read and a longer value is fine.
     uint256 private constant METADATA_MIN_LENGTH = 62;
 
-    LeagueTreasury public immutable TREASURY;
+    LeagueTreasury public immutable treasury;
 
     /// The Chainlink forwarder allowed to call `onReport`. The owner can change it,
     /// because simulation and production use different forwarders.
@@ -53,13 +53,13 @@ contract CreStandingsReceiver is IReceiver, Ownable {
     event ExpectedWorkflowIdSet(bytes32 indexed workflowId);
     event StandingsForwarded(uint256 indexed leagueId);
 
-    constructor(LeagueTreasury treasury, address _forwarder, address initialOwner) Ownable(initialOwner) {
-        if (address(treasury) == address(0) || _forwarder == address(0)) {
+    constructor(LeagueTreasury leagueTreasury, address initialForwarder, address initialOwner) Ownable(initialOwner) {
+        if (address(leagueTreasury) == address(0) || initialForwarder == address(0)) {
             revert CreStandingsReceiver__ZeroAddress();
         }
-        TREASURY = treasury;
-        forwarder = _forwarder;
-        emit ForwarderSet(_forwarder);
+        treasury = leagueTreasury;
+        forwarder = initialForwarder;
+        emit ForwarderSet(initialForwarder);
     }
 
     /*//////////////////////////////////////////////////////////////
@@ -75,8 +75,10 @@ contract CreStandingsReceiver is IReceiver, Ownable {
         _checkWorkflow(metadata);
 
         (uint256 leagueId, uint32[] memory rankedTeamIds) = abi.decode(report, (uint256, uint32[]));
-        TREASURY.submitStandings(leagueId, rankedTeamIds);
+        // Emit before the call. If the treasury rejects the standings, the whole transaction
+        // reverts and the event goes with it, so nothing is logged for a failed report.
         emit StandingsForwarded(leagueId);
+        treasury.submitStandings(leagueId, rankedTeamIds);
     }
 
     function _checkWorkflow(bytes calldata metadata) internal view {
@@ -103,13 +105,15 @@ contract CreStandingsReceiver is IReceiver, Ownable {
                                  SETTINGS
     //////////////////////////////////////////////////////////////*/
 
-    function setForwarder(address _forwarder) external onlyOwner {
-        if (_forwarder == address(0)) revert CreStandingsReceiver__ZeroAddress();
-        forwarder = _forwarder;
-        emit ForwarderSet(_forwarder);
+    function setForwarder(address newForwarder) external onlyOwner {
+        if (newForwarder == address(0)) revert CreStandingsReceiver__ZeroAddress();
+        forwarder = newForwarder;
+        emit ForwarderSet(newForwarder);
     }
 
     /// Pass address(0) to turn the check off (simulation only).
+    // Zero is meant here: it is how the check is switched off. Slither flags the missing zero-check.
+    // slither-disable-next-line missing-zero-check
     function setExpectedWorkflowOwner(address workflowOwner) external onlyOwner {
         expectedWorkflowOwner = workflowOwner;
         emit ExpectedWorkflowOwnerSet(workflowOwner);
